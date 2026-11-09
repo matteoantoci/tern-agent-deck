@@ -264,6 +264,32 @@ function visible.selected(view: Node): { string }
 	return out
 end
 
+-- Whether the state dot of `row` takes Tern's `pulse` effect.
+local function dotPulses(row: Node): boolean
+	for _, child in kids(row) do
+		local p = props(child)
+		if p.role == "agents.dot" and type(p.spans) == "table" then
+			for _, span in p.spans do
+				if type(span) == "table" and span.fx == "pulse" then
+					return true
+				end
+			end
+		end
+	end
+	return false
+end
+
+--- The rows whose state dot pulses (a live agent or subagent), one line each.
+function visible.pulsing(view: Node): { string }
+	local out: { string } = {}
+	for _, row in rowNodes(view) do
+		if dotPulses(row) then
+			table.insert(out, line(row))
+		end
+	end
+	return out
+end
+
 -- The span styles that `agents.css` keeps in the mono face; every other text of the canvas is sans.
 local MONO_STYLES = { "path", "mono", "num", "code", "key" }
 

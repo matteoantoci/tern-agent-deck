@@ -77,6 +77,14 @@ t.test("while omp shows a subagent, its agent keeps the subagent rows and the sh
 	t.eq(visible.hover(out, "Ticket03"), "Ticket03 · Not live\nRole task\nNot updated while omp shows another subagent")
 end)
 
+t.test("the dots of working agents and running subagents pulse; a not-live subagent's dot stays still", function()
+	t.eq(visible.pulsing(after(nil, dock({ "Ticket07" }), 7)), {
+		"●(Working) Lead …",
+		"●(Running) Ticket07 task …",
+		"●(Working) Other …",
+	})
+end)
+
 t.test("a sibling that finished while omp showed another subagent shows as done once the view ends", function()
 	local whileViewing = after(nil, dock({ "Ticket07" }), 7)
 	t.eq(visible.agentRows(whileViewing)[2], "○(Not live) Ticket03 task")

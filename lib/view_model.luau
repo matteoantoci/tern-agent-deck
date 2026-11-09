@@ -118,9 +118,10 @@ export type Output = {
 
 -- Color goes only to states that ask for a look: working (accent) and waiting (warning). An idle agent is the resting
 -- state, a filled neutral dot. A hollow dot marks a row that is not updated live: an exited pinned agent, a closed
--- session, or a subagent the sidebar cannot read while omp shows another one (it may still run).
-local DOT: { [AgentState]: { tone: string, label: string, hollow: boolean? } } = {
-	working = { tone = "accent", label = "Working" },
+-- session, or a subagent the sidebar cannot read while omp shows another one (it may still run). A working dot
+-- pulses, as the dot of a running subagent in omp's own view does.
+local DOT: { [AgentState]: { tone: string, label: string, hollow: boolean?, pulse: boolean? } } = {
+	working = { tone = "accent", label = "Working", pulse = true },
 	waiting_input = { tone = "warning", label = "Waiting for you" },
 	idle = { tone = "muted", label = "Idle" },
 	exited = { tone = "dim", label = "Exited", hollow = true },
@@ -309,9 +310,15 @@ local function detailNode(text: string): Node
 	return { k = "text", p = { text = text, role = ROLE.detail, grow = 1, basis = 0 } }
 end
 
--- A state dot in the 14 px icon column: filled, or hollow for a row that is not updated live.
-local function dotNode(tone: string, label: string, hollow: boolean?): Node
-	return { k = "text", p = { spans = { { t = if hollow then "○" else "●", s = tone } }, aria = label, role = ROLE.dot } }
+-- A state dot in the 14 px icon column: filled, or hollow for a row that is not updated live. A live dot takes Tern's
+-- `pulse` effect (opacity 1 → 0.45 over 1.6 s), the look of a running subagent's dot in omp's own view; Tern stops it
+-- under reduced motion and while the pane is hidden.
+local function dotNode(tone: string, label: string, hollow: boolean?, pulse: boolean?): Node
+	local span: { [string]: string } = { t = if hollow then "○" else "●", s = tone }
+	if pulse then
+		span.fx = "pulse"
+	end
+	return { k = "text", p = { spans = { span }, aria = label, role = ROLE.dot } }
 end
 
 -- One hover-card line: a muted label and its value.
@@ -360,7 +367,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 	local dot = DOT[agent.state]
 	local shownName = name(agent, shared)
 	local children: { Node } = {
-		dotNode(dot.tone, dot.label, dot.hollow),
+		dotNode(dot.tone, dot.label, dot.hollow, dot.pulse),
 		-- An exited agent shows only while pinned, dimmed.
 		nameNode(shownName, if agent.state == "exited" then "dim" else nil, place ~= nil),
 	}
@@ -685,7 +692,8 @@ local function subRow(
 		table.insert(detail, "in " .. parent)
 	end
 	local state = if frozen then "Not live" else "Running"
-	local children: { Node } = { dotNode(if frozen then "dim" else "accent", state, frozen), nameNode(sub.name, nil, #detail > 0) }
+	local children: { Node } =
+		{ dotNode(if frozen then "dim" else "accent", state, frozen, not frozen), nameNode(sub.name, nil, #detail > 0) }
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
 	end
@@ -901,7 +909,7 @@ local function ago(seconds: number): string
 	return string.format("%dd", seconds // DAY)
 end
 
--- A closed session at `depth`: a dim dot, its title (or "Untitled") and, at the right end, how long ago it was
+-- A closed session at `depth`: a hollow dot, its title (or "Untitled") and, at the right end, how long ago it was
 -- last written. A click resumes it in a new tab; a right-click copies its ID or path.
 local function sessionRow(session: Session, time: number?, depth: number): Node
 	local children: { Node } = { dotNode("dim", "Closed", true), nameNode(plainTitle(session.title) or "Untitled") }

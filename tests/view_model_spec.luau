@@ -61,6 +61,20 @@ t.test("each state has its own dot", function()
 	)
 end)
 
+t.test("only a working agent's dot pulses", function()
+	t.eq(
+		visible.pulsing(viewModel.build({
+			agents = {
+				agent({ pane = 1, state = "working", title = "a" }),
+				agent({ pane = 2, state = "waiting_input", title = "b" }),
+				agent({ pane = 3, state = "idle", title = "c" }),
+			},
+			now = 0,
+		}).view),
+		{ "●(Working) a …" }
+	)
+end)
+
 t.test("a working row's hover card counts the turn from its start", function()
 	local view = viewModel.build({ agents = { agent({ state = "working", workingSince = 1000 }) }, now = 66000 }).view
 	t.eq(visible.hover(view, "Fix login"), "Fix login · Working\nWorking for ⏱65s")

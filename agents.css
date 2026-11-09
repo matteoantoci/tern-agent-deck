@@ -97,7 +97,7 @@
 	min-width: 28px;
 	height: 22px;
 	padding: 0;
-	border-radius: 6px;
+	border-radius: var(--r-chip);
 	color: var(--t3);
 	background: transparent;
 	transition:
@@ -226,8 +226,9 @@
 	height: 14px;
 }
 
+/* The state dot is a `●`/`○` glyph at 9px, the size of a job's dot in omp's own view (`omp.job.tile.dot`). */
 [data-role='agents.dot'] {
-	font-size: 8px;
+	font-size: 9px;
 	line-height: 1;
 }
 
@@ -277,9 +278,15 @@
 	opacity: 1;
 }
 
+/* No transitions under the system's reduced motion or Tern's own Reduce motion setting (`.sf-still`). */
 @media (prefers-reduced-motion: reduce) {
 	[data-role='agents.root'] *,
 	[data-role='agents.root'] *::before {
 		transition: none;
 	}
+}
+
+.sf-still [data-role='agents.root'] *,
+.sf-still [data-role='agents.root'] *::before {
+	transition: none;
 }
