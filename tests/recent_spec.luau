@@ -66,7 +66,7 @@ local function live(): { [string]: any }
 	return session(9, ICON .. "Live chat", 0)
 end
 
-local EMPTY = "No recent sessions\nClosed omp sessions of the last 7 days show here."
+local EMPTY = "No recent sessions\nClosed omp sessions of the last 7 days show here"
 
 t.test("a closed folder with closed sessions shows only its row, with their count", function()
 	t.eq(visible.rows(view({ agent({}) }, { live(), session(1, ICON .. "Plan", 2 * HOUR), session(2, nil, 5 * MIN) }, {
@@ -87,10 +87,10 @@ t.test("an open folder lists its sessions newest first, with the title, or Untit
 		session(4, "", 30),
 	})), {
 		HEAD(4),
-		"●(Closed) Untitled now",
-		"●(Closed) Untitled 5m",
-		"●(Closed) Fix login 2h",
-		"●(Closed) Plan the sidebar 3d",
+		"○(Closed) Untitled now",
+		"○(Closed) Untitled 5m",
+		"○(Closed) Fix login 2h",
+		"○(Closed) Plan the sidebar 3d",
 	})
 end)
 
@@ -101,11 +101,11 @@ t.test("a folder lists at most the 5 newest sessions", function()
 	end
 	t.eq(visible.rows(view({ agent({}) }, sessions)), {
 		HEAD(5),
-		"●(Closed) chat 1 1h",
-		"●(Closed) chat 2 2h",
-		"●(Closed) chat 3 3h",
-		"●(Closed) chat 4 4h",
-		"●(Closed) chat 5 5h",
+		"○(Closed) chat 1 1h",
+		"○(Closed) chat 2 2h",
+		"○(Closed) chat 3 3h",
+		"○(Closed) chat 4 4h",
+		"○(Closed) chat 5 5h",
 	})
 end)
 
@@ -119,7 +119,7 @@ t.test("a session that a live process holds open does not show", function()
 	t.eq(visible.rows(view({ agent({}) }, {
 		session(1, "Plan", HOUR),
 		session(2, "Still open", MIN, { open = true }),
-	})), { HEAD(1), "●(Closed) Plan 1h" })
+	})), { HEAD(1), "○(Closed) Plan 1h" })
 end)
 
 t.test("the session of a live agent, found by its working directory and title, does not show", function()
@@ -129,8 +129,8 @@ t.test("the session of a live agent, found by its working directory and title, d
 		session(3, "Plan", HOUR),
 	})), {
 		HEAD(2),
-		"●(Closed) Plan 1h",
-		"●(Closed) Live chat 1d",
+		"○(Closed) Plan 1h",
+		"○(Closed) Live chat 1d",
 	})
 end)
 
@@ -138,13 +138,13 @@ t.test("a live agent whose session has no title yet hides the newest untitled se
 	t.eq(visible.rows(view({ agent({ title = "omp" }) }, {
 		session(1, nil, MIN),
 		session(2, nil, DAY),
-	})), { HEAD(1), "●(Closed) Untitled 1d" })
+	})), { HEAD(1), "○(Closed) Untitled 1d" })
 end)
 
 t.test("an exited agent's session shows", function()
 	t.eq(visible.rows(view({ agent({ pane = 1, title = "Other" }), agent({ pane = 2, state = "exited" }) }, {
 		session(1, ICON .. "Live chat", MIN),
-	})), { HEAD(1), "●(Closed) Live chat 1m" })
+	})), { HEAD(1), "○(Closed) Live chat 1m" })
 end)
 
 t.test("a session started in a subfolder or worktree shows under its main repo", function()
@@ -153,15 +153,15 @@ t.test("a session started in a subfolder or worktree shows under its main repo",
 		session(2, "In a worktree", 2 * HOUR, { cwd = "/Users/me/checkouts/t09" }),
 	})), {
 		HEAD(2),
-		"●(Closed) In lib 1h",
-		"●(Closed) In a worktree 2h",
+		"○(Closed) In lib 1h",
+		"○(Closed) In a worktree 2h",
 	})
 end)
 
 t.test("a pinned agent's folder lists its closed sessions too", function()
 	t.eq(visible.rows(view({ agent({ title = "keep" }) }, { session(1, "Plan", HOUR) }, {
 		pins = { { pane = 1, cwd = REPO, title = "keep" } },
-	})), { HEAD(1), "●(Closed) Plan 1h" })
+	})), { HEAD(1), "○(Closed) Plan 1h" })
 end)
 
 t.test("the Live view lists no closed session, and a folded folder there shows only its row", function()

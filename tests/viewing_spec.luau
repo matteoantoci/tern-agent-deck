@@ -68,9 +68,9 @@ t.test("while omp shows a subagent, its agent keeps the subagent rows and the sh
 	local out = after(nil, dock({ "Ticket07" }), 7)
 	t.eq(visible.agentRows(out), {
 		"●(Working) Lead …",
-		"●(Not live) Ticket03 task",
+		"○(Not live) Ticket03 task",
 		"●(Running) Ticket07 task …",
-		"●(Not live) Merge0407>Ticket04 task · in Ticket07",
+		"○(Not live) Merge0407>Ticket04 task · in Ticket07",
 		"●(Working) Other …",
 	})
 	t.eq(visible.selected(out), { "●(Running) Ticket07 task …" })
@@ -79,7 +79,7 @@ end)
 
 t.test("a sibling that finished while omp showed another subagent shows as done once the view ends", function()
 	local whileViewing = after(nil, dock({ "Ticket07" }), 7)
-	t.eq(visible.agentRows(whileViewing)[2], "●(Not live) Ticket03 task")
+	t.eq(visible.agentRows(whileViewing)[2], "○(Not live) Ticket03 task")
 	local read: any = {
 		agents = { sub("Ticket03", 1, { status = "done" }), sub("Ticket07") },
 		incomplete = false,

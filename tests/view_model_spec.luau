@@ -5,7 +5,7 @@ local viewModel = require("../lib/view_model")
 
 t.test("with no agents, the sidebar says so", function()
 	local out = viewModel.build({ agents = {}, now = 0 })
-	t.eq(visible.lines(out.view), { "No agents running\nStart one here, or run omp in any pane.", "New tab here" })
+	t.eq(visible.lines(out.view), { "No agents running\nStart one here, or run omp in any pane", "New tab here" })
 end)
 
 local ICON = "\u{F0E7} "

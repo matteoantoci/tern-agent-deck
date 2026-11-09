@@ -50,7 +50,7 @@ local function repoRow(name: string, sessions: number): string
 	return string.format(":chev-r :mi-folder %s %d [:plus](New tab in this repo)", name, sessions)
 end
 
-local EMPTY = "No recent sessions\nClosed omp sessions of the last 7 days show here."
+local EMPTY = "No recent sessions\nClosed omp sessions of the last 7 days show here"
 
 t.test("the Recent view lists its folders at the top level, newest session first, live or not", function()
 	local shown = view({
@@ -89,7 +89,7 @@ t.test("the Recent view lists folders while no agent runs, and the Live view sho
 	local sessions = { session("/Users/me/alpha", "a", HOUR) }
 	t.eq(visible.rows(view({}, sessions)), { repoRow("alpha", 1) })
 	t.eq(visible.rows(view({}, sessions, { view = "live" })), {})
-	t.eq(visible.lines(view({}, sessions, { view = "live" }))[1], "No agents running\nStart one here, or run omp in any pane.")
+	t.eq(visible.lines(view({}, sessions, { view = "live" }))[1], "No agents running\nStart one here, or run omp in any pane")
 end)
 
 t.test("a session a process holds open does not make its folder recent", function()
@@ -141,11 +141,11 @@ t.test("a click on a folder opens it to show its last 5 sessions one level under
 	local opened = view({}, sessions, { recentOpen = { [key("/Users/me/alpha")] = true } })
 	t.eq(visible.tree(opened), {
 		":chev :mi-folder-open alpha 5 [:plus](New tab in this repo)",
-		"  ●(Closed) chat 1 1d",
-		"  ●(Closed) chat 2 2d",
-		"  ●(Closed) chat 3 3d",
-		"  ●(Closed) chat 4 4d",
-		"  ●(Closed) chat 5 5d",
+		"  ○(Closed) chat 1 1d",
+		"  ○(Closed) chat 2 2d",
+		"  ○(Closed) chat 3 3d",
+		"  ○(Closed) chat 4 4d",
+		"  ○(Closed) chat 5 5d",
 	})
 	t.eq(visible.click(opened, "chat 2 2d"), "resume=" .. sessions[2].file)
 end)

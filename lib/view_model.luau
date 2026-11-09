@@ -116,11 +116,14 @@ export type Output = {
 	waiting: { number },
 }
 
-local DOT: { [AgentState]: { tone: string, label: string } } = {
+-- Color goes only to states that ask for a look: working (accent) and waiting (warning). An idle agent is the resting
+-- state, a filled neutral dot. A hollow dot marks a row that is not updated live: an exited pinned agent, a closed
+-- session, or a subagent the sidebar cannot read while omp shows another one (it may still run).
+local DOT: { [AgentState]: { tone: string, label: string, hollow: boolean? } } = {
 	working = { tone = "accent", label = "Working" },
 	waiting_input = { tone = "warning", label = "Waiting for you" },
-	idle = { tone = "success", label = "Idle" },
-	exited = { tone = "dim", label = "Exited" },
+	idle = { tone = "muted", label = "Idle" },
+	exited = { tone = "dim", label = "Exited", hollow = true },
 }
 
 -- A hover card holds at most this many bytes of the last message, so that a long answer does not
@@ -306,9 +309,9 @@ local function detailNode(text: string): Node
 	return { k = "text", p = { text = text, role = ROLE.detail, grow = 1, basis = 0 } }
 end
 
--- A state dot in the 14 px icon column.
-local function dotNode(tone: string, label: string): Node
-	return { k = "text", p = { spans = { { t = "●", s = tone } }, aria = label, role = ROLE.dot } }
+-- A state dot in the 14 px icon column: filled, or hollow for a row that is not updated live.
+local function dotNode(tone: string, label: string, hollow: boolean?): Node
+	return { k = "text", p = { spans = { { t = if hollow then "○" else "●", s = tone } }, aria = label, role = ROLE.dot } }
 end
 
 -- One hover-card line: a muted label and its value.
@@ -338,12 +341,13 @@ local function modelFact(model: string): Node
 	return { k = "row", p = { gap = "sm" }, c = children }
 end
 
--- The mark at the right end of an agent row: the spinner while it works, the bell while it waits for the user.
+-- The mark at the right end of an agent row: the spinner while it works, the bell while it waits for the user. Both
+-- stay neutral: the state dot carries the color.
 local function endMark(state: AgentState): Node?
 	if state == "working" then
-		return { k = "spinner", p = { style = "braille", tone = "accent", role = ROLE.status } }
+		return { k = "spinner", p = { style = "braille", tone = "muted", role = ROLE.status } }
 	elseif state == "waiting_input" then
-		return { k = "icon", p = { name = "bell", tone = "warning", role = ROLE.status } }
+		return { k = "icon", p = { name = "bell", tone = "muted", role = ROLE.status } }
 	end
 	return nil
 end
@@ -356,7 +360,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 	local dot = DOT[agent.state]
 	local shownName = name(agent, shared)
 	local children: { Node } = {
-		dotNode(dot.tone, dot.label),
+		dotNode(dot.tone, dot.label, dot.hollow),
 		-- An exited agent shows only while pinned, dimmed.
 		nameNode(shownName, if agent.state == "exited" then "dim" else nil, place ~= nil),
 	}
@@ -681,7 +685,7 @@ local function subRow(
 		table.insert(detail, "in " .. parent)
 	end
 	local state = if frozen then "Not live" else "Running"
-	local children: { Node } = { dotNode(if frozen then "muted" else "accent", state), nameNode(sub.name, nil, #detail > 0) }
+	local children: { Node } = { dotNode(if frozen then "dim" else "accent", state, frozen), nameNode(sub.name, nil, #detail > 0) }
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
 	end
@@ -900,7 +904,7 @@ end
 -- A closed session at `depth`: a dim dot, its title (or "Untitled") and, at the right end, how long ago it was
 -- last written. A click resumes it in a new tab; a right-click copies its ID or path.
 local function sessionRow(session: Session, time: number?, depth: number): Node
-	local children: { Node } = { dotNode("dim", "Closed"), nameNode(plainTitle(session.title) or "Untitled") }
+	local children: { Node } = { dotNode("dim", "Closed", true), nameNode(plainTitle(session.title) or "Untitled") }
 	if time then
 		local age = ago(math.max(0, time - session.at))
 		table.insert(children, { k = "text", p = { spans = { { t = age, s = "muted" } }, wrap = "none", role = ROLE.meta } })
@@ -1244,7 +1248,7 @@ local function liveBody(input: Input, shared: Shared): { Node }
 				key = "empty",
 				icon = "terminal",
 				title = "No agents running",
-				text = "Start one here, or run omp in any pane.",
+				text = "Start one here, or run omp in any pane",
 			},
 			c = { start },
 		})
@@ -1315,7 +1319,7 @@ local function recentBody(input: Input): { Node }
 				key = "empty",
 				icon = "history",
 				title = "No recent sessions",
-				text = "Closed omp sessions of the last 7 days show here.",
+				text = "Closed omp sessions of the last 7 days show here",
 			},
 		})
 	end

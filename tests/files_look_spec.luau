@@ -144,7 +144,7 @@ t.test("the Recent view lists its folders at the top level, the one with the new
 	})
 	t.eq(visible.tree(out), {
 		string.format(FOLDER, 1),
-		"  ●(Closed) Plan 1h",
+		"  ○(Closed) Plan 1h",
 		":chev-r :mi-folder alpha 1 [:plus](New tab in this repo)",
 	})
 	t.eq(visible.click(out, "tern-agents"), "recent=" .. KEY)
@@ -153,7 +153,7 @@ end)
 
 t.test("the Recent view says so when there is no closed session", function()
 	t.eq(visible.lines(view({ view = "recent", agents = { agent({}) } })), {
-		"No recent sessions\nClosed omp sessions of the last 7 days show here.",
+		"No recent sessions\nClosed omp sessions of the last 7 days show here",
 	})
 end)
 

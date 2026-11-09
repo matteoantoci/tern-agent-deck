@@ -82,7 +82,7 @@ t.test("a pin ignores another agent that got its old pane id in another folder",
 	local agents = { agent({ pane = 2, title = "other work", cwd = "/tmp" }) }
 	local pins = { { pane = 2, cwd = REPO, title = "build" } }
 	local v = view({ agents = agents, pins = pins })
-	t.eq(visible.rows(v), { ":pin Pinned 1", "●(Exited) build", ":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)", "●(Idle) other work" })
+	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build", ":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)", "●(Idle) other work" })
 	t.eq(visible.click(v, "build"), "gone=1", "a click on the gone agent does not focus the other one")
 	t.eq(visible.menu(v, "build"), { "Unpin → forget=1" })
 	t.eq(visible.menu(v, "other work")[1], "Pin → pin=2")
@@ -99,13 +99,13 @@ t.test("a pinned agent that exited stays in Pinned, dimmed", function()
 		agents = { agent({ pane = 2, title = "build", state = "exited" }) },
 		pins = { { pane = 2, cwd = REPO, title = "build" } },
 	})
-	t.eq(visible.rows(v), { ":pin Pinned 1", "●(Exited) build" })
+	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build" })
 	t.eq(visible.dimmed(v, "build"), true)
 end)
 
 t.test("a pinned agent whose pane is gone stays in Pinned, dimmed, under its last title", function()
 	local v = view({ agents = {}, pins = { { pane = 2, cwd = REPO, title = "\u{F0E7} build" } } })
-	t.eq(visible.rows(v), { ":pin Pinned 1", "●(Exited) build" })
+	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build" })
 	t.eq(visible.dimmed(v, "build"), true)
 	t.eq(visible.menu(v, "build"), { "Unpin → forget=1" })
 	t.eq(visible.click(v, "build"), "gone=1")
@@ -120,7 +120,7 @@ t.test("an exited agent that is not pinned leaves the list", function()
 	t.eq(visible.rows(view({
 		agents = { agent({ pane = 1, title = "plan" }), agent({ pane = 2, title = "build", state = "exited" }) },
 	})), { ":chev :mi-folder-open tern-agents 1 [:plus](New tab in this repo)", "●(Idle) plan" })
-	t.eq(visible.lines(view({ agents = { agent({ state = "exited" }) } }))[1], "No agents running\nStart one here, or run omp in any pane.")
+	t.eq(visible.lines(view({ agents = { agent({ state = "exited" }) } }))[1], "No agents running\nStart one here, or run omp in any pane")
 end)
 
 t.test("the right-click menu offers Pin and Interrupt, and Interrupt only while the agent is in a turn", function()

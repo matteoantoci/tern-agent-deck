@@ -78,7 +78,7 @@ end)
 
 t.test("with no agents, the sidebar shows an empty state that offers a new tab here", function()
 	local out = view({})
-	t.eq(visible.lines(out), { "No agents running\nStart one here, or run omp in any pane.", "New tab here" })
+	t.eq(visible.lines(out), { "No agents running\nStart one here, or run omp in any pane", "New tab here" })
 	local empty = visible.find(out, "empty") :: any
 	t.eq(empty.c[1].p.actions.click, "new-here")
 end)
