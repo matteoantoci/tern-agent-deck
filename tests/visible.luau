@@ -340,6 +340,16 @@ function visible.click(view: Node, text: string): string?
 	return actions and actions.click
 end
 
+--- The tone of the first icon in the row that shows `text` (`success`, `error`, `muted`, …), or nil.
+function visible.iconTone(view: Node, text: string): string?
+	for _, child in kids(findRow(view, text)) do
+		if child.k == "icon" then
+			return props(child).tone
+		end
+	end
+	return nil
+end
+
 --- The action a click on the first button in the row that shows `text` sends, or nil when it has no button.
 function visible.button(view: Node, text: string): string?
 	for _, child in kids(findRow(view, text)) do

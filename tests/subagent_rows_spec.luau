@@ -104,7 +104,7 @@ t.test("a click on a subagent row asks to show that subagent in omp's view, at e
 	t.eq(visible.click(out, "Deep"), "subagent=7 dx.Deep")
 end)
 
-t.test("finished subagents at every level fold into one done line; pending ones show nothing yet", function()
+t.test("finished subagents at every level fold into one line that counts each result; pending ones show nothing yet", function()
 	t.eq(visible.agentRows(view("working", {
 		sub("A", "done"),
 		sub("B", "running"),
@@ -115,9 +115,20 @@ t.test("finished subagents at every level fold into one done line; pending ones 
 	})), {
 		"●(Working) Lead",
 		"●(Running) B",
-		":check 4 subagents done",
+		":x 2 subagents done, 1 failed, 1 stopped",
 	})
 	t.eq(visible.agentRows(view("working", { sub("A", "done") })), { "●(Working) Lead", ":check 1 subagent done" })
+	t.eq(visible.agentRows(view("working", { sub("A", "failed") })), { "●(Working) Lead", ":x 1 subagent failed" })
+end)
+
+t.test("the finished line takes its tone from the worst result: green when all succeed, red on a failure, muted on a stop", function()
+	local allDone = view("working", { sub("A", "done"), sub("B", "done") })
+	t.eq(visible.iconTone(allDone, "2 subagents done"), "success")
+	local oneFailed = view("working", { sub("A", "done"), sub("B", "failed"), sub("C", "aborted") })
+	t.eq(visible.iconTone(oneFailed, "1 subagent done, 1 failed, 1 stopped"), "error")
+	local oneStopped = view("working", { sub("A", "done"), sub("B", "aborted") })
+	t.eq(visible.agentRows(oneStopped), { "●(Working) Lead", ":check 1 subagent done, 1 stopped" })
+	t.eq(visible.iconTone(oneStopped, "1 subagent done, 1 stopped"), "muted")
 end)
 
 t.test("when the agent becomes idle with every subagent finished, its done line disappears", function()

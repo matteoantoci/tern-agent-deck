@@ -643,8 +643,6 @@ end
 -- one "+N deeper" line.
 local MAX_DEPTH = 8 + 1
 
-local FINISHED = { done = true, failed = true, aborted = true }
-
 -- The session file omp writes for the subagent `name` (its omp id, nesting levels joined by `>` as omp names the
 -- `agent` node) of the agent whose session file is `main`. omp writes a subagent's session to `<dir>/<omp id>.jsonl`,
 -- where `<dir>` is the file of the session that started it without `.jsonl` (`subtaskSessionFile` in omp's
@@ -741,10 +739,34 @@ local function subRow(
 	}
 end
 
--- A line under the subagents that says something about them and takes no click: the done count, the cut read.
+-- A line under the subagents that says something about them and takes no click: the finished count, the cut read.
 local function infoLine(key: string, icon: string, tone: string, text: string, style: string, depth: number): Node
 	local children: { Node } = { iconNode(icon, tone), nameNode(text, style) }
 	return { k = "row", p = { key = key, gap = "sm", role = rowRole("info", depth) }, c = children }
+end
+
+-- The line that counts the finished subagents by result, as "2 subagents done, 1 failed, 1 stopped". The worst result
+-- sets the icon: a red cross for a failure, else a muted check for a stop, else a green check, as omp's job tile draws a
+-- finished job. Nil when none finished.
+local function finishedLine(done: number, failed: number, stopped: number, depth: number): Node?
+	local counts = { { n = done, word = "done" }, { n = failed, word = "failed" }, { n = stopped, word = "stopped" } }
+	local parts: { string } = {}
+	for _, count in counts do
+		if count.n > 0 then
+			local noun = if #parts > 0 then "" elseif count.n == 1 then " subagent" else " subagents"
+			table.insert(parts, string.format("%d%s %s", count.n, noun, count.word))
+		end
+	end
+	if #parts == 0 then
+		return nil
+	end
+	local icon, tone = "check", "success"
+	if failed > 0 then
+		icon, tone = "x", "error"
+	elseif stopped > 0 then
+		tone = "muted"
+	end
+	return infoLine("subs-done", icon, tone, table.concat(parts, ", "), "muted", depth)
 end
 
 -- Whether any of `subs` runs: omp runs `task` subagents in the background, so they can outlive their agent's turn.
@@ -758,7 +780,7 @@ local function running(subs: subagents.Subagents): boolean
 end
 
 -- The agent's row at `depth`, wrapped while it works or any of its subagents runs with the rows of its running subagents at every nesting level,
--- one line that counts the finished ones, and a warning when Tern cut the read, all one level deeper.
+-- one line that counts the finished ones by result, and a warning when Tern cut the read, all one level deeper.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	local main = row(agent, shared, pinned, depth)
 	if not subs or not (agent.state == "working" or (agent.state ~= "exited" and running(subs))) then
@@ -766,7 +788,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	end
 	local pane = string.format("%.0f", agent.pane)
 	local lines: { Node } = { main }
-	local done, deeper = 0, 0
+	local done, failed, stopped, deeper = 0, 0, 0, 0
 	-- The subagent the focused pane's omp shows takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
@@ -782,17 +804,21 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			end
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 			table.insert(lines, subRow(sub, pane, agent.sessionFile, depth + 1, selected, frozen))
-		elseif FINISHED[sub.status] then
+		elseif sub.status == "done" then
 			done += 1
+		elseif sub.status == "failed" then
+			failed += 1
+		elseif sub.status == "aborted" then
+			stopped += 1
 		end
 	end
 	if deeper > 0 then
 		local text = string.format("+%d deeper", deeper)
 		table.insert(lines, infoLine("subs-deeper", "more", "muted", text, "muted", depth + 1))
 	end
-	if done > 0 then
-		local text = string.format("%d %s done", done, if done == 1 then "subagent" else "subagents")
-		table.insert(lines, infoLine("subs-done", "check", "muted", text, "muted", depth + 1))
+	local finished = finishedLine(done, failed, stopped, depth + 1)
+	if finished then
+		table.insert(lines, finished)
 	end
 	if subs.incomplete then
 		local text = "subagents may be incomplete"
