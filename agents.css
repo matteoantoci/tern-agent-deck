@@ -1,0 +1,285 @@
+/* The Agents sidebar, drawn like Tern's Files pane: a 40px head (glyph, bold title, tools), a 30px strip of view
+   buttons, then a tree with the tree's geometry: rows a line plus 6px high, the chevron in a 16px box, a compact
+   indent (an agent's dot under its folder's glyph, one 10px step below that), one guide line under the folder's
+   chevron, the selection a full-width tint with the accent bar at the canvas's edge.
+   Only Tern's variables carry colors and sizes, so themes, light and dark, and the font size follow Tern.
+
+   A canvas opens in the terminal's mono face and takes no `font` option (Tern 0.9.13), so the root sets the UI face as
+   Tern's sans regions do, and paths stay mono. A canvas has no padding of its own: its edge, about 10px inside the
+   pane's rounded frame, clips, so the head, the strip and the rows span the canvas from edge to edge. */
+
+[data-role='agents.root'] {
+	font: 400 13px/18px var(--sans);
+	letter-spacing: -0.003em;
+	color: var(--t2);
+}
+
+[data-role='agents.root'] :is(.sf-t-mono, .sf-t-code, .sf-t-num, .sf-t-path, .sf-t-key) {
+	font-family: var(--tv-font, var(--mono));
+	font-size: 12.5px;
+	letter-spacing: 0;
+}
+
+/* The head and the view strip stay at the top while the list scrolls. */
+[data-role='agents.chrome'] {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	background: var(--panel);
+}
+
+[data-role='agents.root'] [data-role='agents.top'] {
+	height: 40px;
+	gap: 7px;
+	padding: 0 6px 0 12px;
+	box-shadow: inset 0 -1px 0 var(--l1);
+}
+
+[data-role='agents.glyph'] {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+	color: var(--t3);
+}
+
+[data-role='agents.title'] {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: 13px;
+	font-weight: 550;
+	color: var(--t1);
+}
+
+/* The head's tools: 26px quiet squares in the icon color; the ⋯ menu shows while the pointer is on the sidebar, the
+   hide button always. */
+[data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.tool'] button) {
+	display: grid;
+	place-items: center;
+	width: 26px;
+	min-width: 26px;
+	height: 26px;
+	padding: 0;
+	line-height: 1;
+	color: var(--t3);
+}
+
+[data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.tool'] button):hover {
+	color: var(--t1);
+}
+
+/* The menu node aligns itself to the top of its row: put it back on the head's center line. */
+[data-role='agents.root'] [data-role='agents.tool'] {
+	flex: none;
+	align-self: center;
+	opacity: 0;
+	transition: opacity 0.15s var(--ease);
+}
+
+[data-role='agents.root']:hover [data-role='agents.tool'],
+[data-role='agents.tool']:focus-within {
+	opacity: 1;
+}
+
+/* The view strip: 28 x 22 icon buttons, the shown view tinted. */
+[data-role='agents.root'] [data-role='agents.views'] {
+	height: 30px;
+	gap: 2px;
+	padding: 0 8px;
+	box-shadow: inset 0 -1px 0 var(--l1);
+}
+
+[data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) {
+	width: 28px;
+	min-width: 28px;
+	height: 22px;
+	padding: 0;
+	border-radius: 6px;
+	color: var(--t3);
+	background: transparent;
+	transition:
+		background-color 0.15s,
+		color 0.15s;
+}
+
+[data-role='agents.root'] [data-role='agents.view']:hover {
+	color: var(--t1);
+	background: var(--l1);
+}
+
+[data-role='agents.root'] [data-role='agents.view.on'] {
+	color: var(--t1);
+	background: var(--l2);
+}
+
+[data-role='agents.body'] {
+	padding: 4px 0 6px;
+}
+
+/* Tree rows, by role `agents.<kind>.<depth>`. The indent stays compact, so that names keep the width of a narrow
+   sidebar: a row without a chevron puts its icon (a state dot) in the folder glyph's column, 32px in, so that an
+   agent's name starts where its folder's name starts; a level below that (subagents, the agents under Older, the
+   sessions of a Recent folder) adds one 10px step, and no level adds more. A row with a chevron starts 10px in at the
+   top level, and below it puts its chevron in that icon column. */
+[data-role='agents.root']
+	:is(
+		[data-role^='agents.item.'],
+		[data-role^='agents.on.'],
+		[data-role^='agents.folder.'],
+		[data-role^='agents.fold.'],
+		[data-role^='agents.head.'],
+		[data-role^='agents.info.']
+	) {
+	--agents-lead: 32px;
+	--agents-step: 10px;
+	--agents-guide: 1px;
+	position: relative;
+	height: calc(var(--sf-lh) + 6px);
+	min-width: 0;
+	gap: 6px;
+	padding: 0 8px 0 calc(var(--agents-lead) + var(--agents-step));
+	white-space: nowrap;
+	transition: background-color 0.12s;
+}
+
+[data-role='agents.root'] :is([data-role$='.0'], [data-role$='.1']) {
+	--agents-step: 0px;
+}
+
+[data-role='agents.root'] [data-role$='.0'] {
+	--agents-guide: 0px;
+}
+
+[data-role='agents.root'] :is([data-role^='agents.folder.'], [data-role^='agents.fold.']) {
+	--agents-lead: 31px;
+}
+
+[data-role='agents.root'] :is([data-role='agents.folder.0'], [data-role='agents.fold.0']) {
+	--agents-lead: 10px;
+}
+
+/* One guide line, under the top-level folder's chevron, on every row inside a section. */
+[data-role='agents.root']
+	:is(
+		[data-role^='agents.item.'],
+		[data-role^='agents.on.'],
+		[data-role^='agents.folder.'],
+		[data-role^='agents.fold.'],
+		[data-role^='agents.info.']
+	)::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 18px;
+	width: var(--agents-guide);
+	background: var(--l2);
+	pointer-events: none;
+}
+
+[data-role='agents.root']
+	:is(
+		[data-role^='agents.item.'],
+		[data-role^='agents.on.'],
+		[data-role^='agents.folder.'],
+		[data-role^='agents.fold.']
+	):hover {
+	background-color: var(--l1);
+}
+
+/* The focused agent's row: the Files pane's selection, a full-width accent tint with a 2px bar at the edge. */
+[data-role='agents.root'] :is([data-role^='agents.on.'], [data-role^='agents.on.']:hover) {
+	background-color: rgb(from var(--accent) r g b / 10%);
+	box-shadow: inset 2px 0 0 var(--accent);
+	color: var(--t1);
+}
+
+/* Row parts: the chevron in a 16px box, the 14px icon column (icons and state dots), names cut with an ellipsis
+   here rather than by Tern's `truncate`, which would give the cut text a tooltip of its own under the hover card. */
+[data-role='agents.chev'] {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 16px;
+	height: 16px;
+	color: var(--t4);
+}
+
+[data-role='agents.chev'] svg {
+	width: 10px;
+	height: 10px;
+}
+
+:is([data-role='agents.icon'], [data-role='agents.dot'], [data-role='agents.glyph']) svg {
+	width: 14px;
+	height: 14px;
+}
+
+:is([data-role='agents.icon'], [data-role='agents.dot']) {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 14px;
+	height: 14px;
+}
+
+[data-role='agents.dot'] {
+	font-size: 8px;
+	line-height: 1;
+}
+
+:is([data-role='agents.name'], [data-role='agents.detail']) {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+/* The secondary part after a name (a subagent's role and parent, a waiting agent's folder): dimmer and smaller than
+   the name, in normal weight, so that it does not read as part of the name. `--t3`, not `--t4`: the default theme's
+   `--t4` (#b3b5bb on white, #55555c on dark) is about 2:1 against the pane, too faint for text. */
+[data-role='agents.detail'] {
+	color: var(--t3);
+	font-size: 0.85em;
+	font-weight: 400;
+}
+
+[data-role='agents.status'] {
+	flex: none;
+}
+
+/* Counts in the Files pane's small mono digits. A folder row's count and its `+` show while the pointer is on it. */
+:is([data-role='agents.count'], [data-role='agents.meta']) {
+	flex: none;
+	font: 11px var(--mono);
+	color: var(--t4);
+	font-variant-numeric: tabular-nums;
+}
+
+[data-role='agents.root'] [data-role='agents.hover'] {
+	width: 20px;
+	min-width: 20px;
+	height: 20px;
+	margin-right: -4px;
+	padding: 0;
+	color: var(--t3);
+}
+
+:is([data-role='agents.count'], [data-role='agents.hover']) {
+	opacity: 0;
+	transition: opacity 0.15s var(--ease);
+}
+
+[data-role^='agents.folder.']:is(:hover, :focus-within) :is([data-role='agents.count'], [data-role='agents.hover']) {
+	opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	[data-role='agents.root'] *,
+	[data-role='agents.root'] *::before {
+		transition: none;
+	}
+}

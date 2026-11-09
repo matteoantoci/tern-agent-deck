@@ -1,0 +1,8 @@
+schema = 1
+id = "agent-deck"
+name = "Agent Deck"
+version = "0.1.0"
+description = "A sidebar in every tab: your coding agents and their subagents by project, waiting agents first, pins, and recent sessions to resume."
+icon = "bot"
+window = "window.luau"
+styles = ["agents.css"]
