@@ -59,7 +59,7 @@ end)
 t.test("Needs you hides when no agent waits, and leaves out a waiting agent that is pinned", function()
 	t.eq(visible.rows(build({ agents = { agent({ pane = 1, title = "plan", state = "working", workingSince = 0 }) } }).view), {
 		HEAD(1),
-		"●(Working) plan …",
+		"●(Working) plan",
 	})
 	t.eq(visible.rows(build({
 		agents = { agent({ pane = 1, title = "plan" }), agent({ pane = 2, title = "ask", state = "waiting_input" }) },

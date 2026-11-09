@@ -1,6 +1,6 @@
 --!strict
--- Compact rows (ticket 08, then the Files look): one line each, the name first and only the spinner or the bell at
--- the right end; the model, effort, timer and every other fact go to the hover card.
+-- Compact rows (ticket 08, then the Files look): one line each, the name first and only the bell of a waiting agent
+-- at the right end; the model, effort, timer and every other fact go to the hover card.
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
@@ -17,9 +17,9 @@ local function view(agents: { any }, now: number?): any
 	return viewModel.build({ agents = agents, now = now or 0 }).view
 end
 
-t.test("a working row shows the dot, the name and the spinner; the logo, effort and timer are in its card", function()
+t.test("a working row shows the dot and the name only; the logo, effort and timer are in its card", function()
 	local out = view({ agent({ state = "working", model = "Opus 5.5 \u{F0EB}", effort = "high", workingSince = 0 }) }, 12000)
-	t.eq(visible.agentRows(out), { "●(Working) Fix login …" })
+	t.eq(visible.agentRows(out), { "●(Working) Fix login" })
 	t.eq(visible.hover(out, "Fix login"), "Fix login · Working\n:provider-anthropic Model Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
 end)
 

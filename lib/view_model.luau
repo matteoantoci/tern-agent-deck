@@ -252,8 +252,8 @@ local MINUTE, HOUR, DAY = 60, 60 * 60, 24 * 60 * 60
 -- role `agents.<kind>.<depth>` (see `rowRole`); its parts: the chevron, the 14 px icon column (a toned icon, a state
 -- dot, or an untoned glyph in the icon color: the head's and the folder rows'), the name and the dim detail (cut with
 -- an ellipsis in CSS, so that Tern adds no tooltip of its own under a row's hover card), the count a folder row shows
--- on hover and the one a head always shows, the controls that show on hover, and the spinner or bell at an agent
--- row's right end.
+-- on hover and the one a head always shows, the controls that show on hover, and the bell at a waiting agent row's
+-- right end.
 local ROLE = {
 	root = "agents.root",
 	chrome = "agents.chrome",
@@ -348,19 +348,17 @@ local function modelFact(model: string): Node
 	return { k = "row", p = { gap = "sm" }, c = children }
 end
 
--- The mark at the right end of an agent row: the spinner while it works, the bell while it waits for the user. Both
--- stay neutral: the state dot carries the color.
+-- The mark at the right end of an agent row: the bell while it waits for the user, in neutral (the state dot
+-- carries the color). A working agent has no end mark: its pulsing dot already says so.
 local function endMark(state: AgentState): Node?
-	if state == "working" then
-		return { k = "spinner", p = { style = "braille", tone = "muted", role = ROLE.status } }
-	elseif state == "waiting_input" then
+	if state == "waiting_input" then
 		return { k = "icon", p = { name = "bell", tone = "muted", role = ROLE.status } }
 	end
 	return nil
 end
 
 -- An agent's row at `depth` in the tree: the state dot, the name and, when `place` is given, the repo's folder name
--- after it (the Needs you strip shows where each agent works), then the spinner or the bell. A row carries no
+-- after it (the Needs you strip shows where each agent works), then the bell of a waiting agent. A row carries no
 -- tooltip: its hover card holds every fact: the state, the repo, the model with its provider's logo, the effort,
 -- the live turn timer and the last message.
 local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number, place: { name: string, path: string }?): Node
@@ -668,12 +666,12 @@ local function subagentFile(main: string?, name: string): string?
 	return path .. ".jsonl"
 end
 
--- One running subagent, at any nesting level, at `depth` in the tree (one level under its agent): the running dot,
--- the name, a dim detail with its type and, below the first level, the subagent it runs under, and the spinner. The
+-- One running subagent, at any nesting level, at `depth` in the tree (one level under its agent): the pulsing
+-- running dot, the name, and a dim detail with its type and, below the first level, the subagent it runs under. The
 -- hover card repeats them with the model, effort, current tool and intent. A click asks to show the subagent in omp's
 -- view (`subagent=<pane> <node id>`); a right-click copies the ID or path of its own session file, found from its
 -- agent's (`agentFile`). A `frozen` row (its state is the last one read, while omp shows another subagent) has a
--- muted dot, no spinner, and says so.
+-- hollow dim dot that does not pulse, and says so.
 local function subRow(
 	sub: subagents.Subagent,
 	pane: string,
@@ -696,9 +694,6 @@ local function subRow(
 		{ dotNode(if frozen then "dim" else "accent", state, frozen, not frozen), nameNode(sub.name, nil, #detail > 0) }
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
-	end
-	if not frozen then
-		table.insert(children, endMark("working") :: Node)
 	end
 	local card: { Node } = { cardHead(sub.name, state) }
 	if role then

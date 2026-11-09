@@ -82,7 +82,7 @@ t.test("working and waiting agents never fold, however long ago their last turn 
 	t.eq(visible.rows(view({
 		agent({ pane = 1, title = "busy", state = "working", workingSince = 0, activeAt = NOW - 5 * DAY }),
 		agent({ pane = 2, title = "asks", state = "waiting_input", activeAt = NOW - 5 * DAY }),
-	})), { ":bell Needs you 1", "●(Waiting for you) asks tern-agents :bell", HEAD(2), "●(Working) busy …", "●(Waiting for you) asks :bell" })
+	})), { ":bell Needs you 1", "●(Waiting for you) asks tern-agents :bell", HEAD(2), "●(Working) busy", "●(Waiting for you) asks :bell" })
 end)
 
 t.test("an agent never seen in a turn counts as new", function()

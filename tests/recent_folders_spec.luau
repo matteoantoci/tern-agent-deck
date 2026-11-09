@@ -158,7 +158,7 @@ t.test("when an agent starts in a recent folder, the folder still shows once", f
 	t.eq(visible.rows(view(agents, sessions)), { repoRow("alpha", 1) })
 	t.eq(visible.rows(view(agents, sessions, { view = "live" })), {
 		":chev :mi-folder-open alpha 1 [:plus](New tab in this repo)",
-		"●(Working) new …",
+		"●(Working) new",
 	})
 end)
 

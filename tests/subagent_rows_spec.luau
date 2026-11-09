@@ -23,16 +23,16 @@ local function view(state: string, agents: { any }, incomplete: boolean?): any
 	}).view
 end
 
-t.test("a subagent row shows the spinner, the name and its role, with no model chip and no tool text", function()
+t.test("a subagent row shows the dot, the name and its role, with no model chip, no tool text and no end mark", function()
 	t.eq(visible.agentRows(view("working", {
 		sub("Ticket03", "running", 1, { model = "anthropic/claude-opus-5-5", role = "task" }),
 		sub("Ticket07", "running", 1, { tool = "bash", intent = "Running probe", model = "GPT-5.1", role = "scout" }),
 		sub("Bare", "running", 1),
 	})), {
-		"●(Working) Lead …",
-		"●(Running) Ticket03 task …",
-		"●(Running) Ticket07 scout …",
-		"●(Running) Bare …",
+		"●(Working) Lead",
+		"●(Running) Ticket03 task",
+		"●(Running) Ticket07 scout",
+		"●(Running) Bare",
 	})
 end)
 
@@ -78,11 +78,11 @@ t.test("nested subagents show in the same flat list, each naming the subagent it
 		sub("Other", "running", 1),
 	})
 	t.eq(visible.agentRows(out), {
-		"●(Working) Lead …",
-		"●(Running) Merge0407 task …",
-		"●(Running) Ticket04 task · in Merge0407 …",
-		"●(Running) Probe in Ticket04 …",
-		"●(Running) Other …",
+		"●(Working) Lead",
+		"●(Running) Merge0407 task",
+		"●(Running) Ticket04 task · in Merge0407",
+		"●(Running) Probe in Ticket04",
+		"●(Running) Other",
 	})
 	t.eq(visible.hover(out, "Probe"), "Probe · Running\nUnder Ticket04")
 end)
@@ -94,7 +94,7 @@ t.test("every level omp renders shows; a level past omp's limit folds into one +
 	end
 	local rows = visible.agentRows(view("working", subs))
 	t.eq(#rows, 1 + 9 + 1)
-	t.eq(rows[10], "●(Running) L9 in L8 …")
+	t.eq(rows[10], "●(Running) L9 in L8")
 	t.eq(rows[11], ":more +2 deeper")
 end)
 
@@ -113,11 +113,11 @@ t.test("finished subagents at every level fold into one done line; pending ones 
 		sub("E", "pending"),
 		sub("F", "done", 3),
 	})), {
-		"●(Working) Lead …",
-		"●(Running) B …",
+		"●(Working) Lead",
+		"●(Running) B",
 		":check 4 subagents done",
 	})
-	t.eq(visible.agentRows(view("working", { sub("A", "done") })), { "●(Working) Lead …", ":check 1 subagent done" })
+	t.eq(visible.agentRows(view("working", { sub("A", "done") })), { "●(Working) Lead", ":check 1 subagent done" })
 end)
 
 t.test("when the agent becomes idle with every subagent finished, its done line disappears", function()
@@ -127,23 +127,23 @@ end)
 t.test("an idle agent whose background subagents still run keeps their rows under its idle row", function()
 	t.eq(visible.agentRows(view("idle", { sub("A", "done"), sub("B", "running") })), {
 		"●(Idle) Lead",
-		"●(Running) B …",
+		"●(Running) B",
 		":check 1 subagent done",
 	})
 end)
 
 t.test("a read that Tern cut shows that the subagents may be incomplete", function()
 	t.eq(visible.agentRows(view("working", { sub("B", "running") }, true)), {
-		"●(Working) Lead …",
-		"●(Running) B …",
+		"●(Working) Lead",
+		"●(Running) B",
 		":warn subagents may be incomplete",
 	})
-	t.eq(visible.agentRows(view("working", {}, true)), { "●(Working) Lead …", ":warn subagents may be incomplete" })
+	t.eq(visible.agentRows(view("working", {}, true)), { "●(Working) Lead", ":warn subagents may be incomplete" })
 end)
 
 t.test("an agent with no subagent data (Claude Code, Codex, omp without a task call) shows only its row", function()
 	t.eq(visible.agentRows(viewModel.build({ agents = { lead("working") }, now = 0, subagents = {} }).view), {
-		"●(Working) Lead …",
+		"●(Working) Lead",
 	})
 end)
 
@@ -160,8 +160,8 @@ t.test("a working agent in a repo group shows its subagent rows inside that grou
 	}).view
 	t.eq(visible.rows(out), {
 		":chev :mi-folder-open alpha 1 [:plus](New tab in this repo)",
-		"●(Working) Lead …",
-		"●(Running) Ticket07 …",
+		"●(Working) Lead",
+		"●(Running) Ticket07",
 		":check 1 subagent done",
 		":chev :mi-folder-open beta 1 [:plus](New tab in this repo)",
 		"●(Idle) Docs",

@@ -54,7 +54,7 @@ t.test("each state has its own dot", function()
 			":bell Needs you 1",
 			"●(Waiting for you) b repo :bell",
 			folder("/repo", 3),
-			"●(Working) a …",
+			"●(Working) a",
 			"●(Waiting for you) b :bell",
 			"●(Idle) c",
 		}
@@ -71,7 +71,7 @@ t.test("only a working agent's dot pulses", function()
 			},
 			now = 0,
 		}).view),
-		{ "●(Working) a …" }
+		{ "●(Working) a" }
 	)
 end)
 
@@ -118,7 +118,7 @@ t.test("rows keep the order in which the agents started, whatever their state", 
 		agent({ pane = 10, title = "first", state = "working" }),
 		agent({ pane = 20, title = "second" }),
 	}), {
-		"●(Working) first …",
+		"●(Working) first",
 		"●(Idle) second",
 		"●(Idle) third",
 	})
@@ -199,8 +199,8 @@ t.test("sections and rows stay in place when agent states change", function()
 		":bell Needs you 1",
 		"●(Waiting for you) x zeta :bell",
 		repo("~/alpha", 2),
-		"●(Working) y …",
-		"●(Working) z …",
+		"●(Working) y",
+		"●(Working) z",
 		repo("~/zeta", 1),
 		"●(Waiting for you) x :bell",
 	})

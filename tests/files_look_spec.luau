@@ -86,9 +86,9 @@ t.test("agents sit one level under their folder, subagents and their lines one m
 	})
 	t.eq(visible.tree(out), {
 		string.format(FOLDER, 2),
-		"  ●(Working) Lead …",
-		"    ●(Running) A …",
-		"    ●(Running) B in A …",
+		"  ●(Working) Lead",
+		"    ●(Running) A",
+		"    ●(Running) B in A",
 		"    :check 1 subagent done",
 		"  :chev Older 1",
 		"    ●(Idle) old",
@@ -109,7 +109,7 @@ t.test("Needs you and Pinned list their agents one level under their head", func
 	})
 end)
 
-t.test("an agent row ends in a spinner while it works and a bell while it waits; model, effort and timer are in its card", function()
+t.test("a working agent row ends in nothing and a waiting one in a bell; model, effort and timer are in its card", function()
 	local out = view({
 		agents = {
 			agent({ pane = 1, title = "a", state = "working", model = "Opus 5.5 \u{F0EB}", effort = "high", workingSince = 0 }),
@@ -120,11 +120,11 @@ t.test("an agent row ends in a spinner while it works and a bell while it waits;
 	})
 	t.eq(visible.agentRows(out), {
 		"●(Waiting for you) b tern-agents :bell",
-		"●(Working) a …",
+		"●(Working) a",
 		"●(Waiting for you) b :bell",
 		"●(Idle) c",
 	})
-	t.eq(visible.hover(out, "a …"), "a · Working\n:provider-anthropic Model Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
+	t.eq(visible.hover(out, "(Working) a"), "a · Working\n:provider-anthropic Model Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
 	t.eq(visible.hover(out, "(Idle) c"), "c · Idle\nModel Kimi K2")
 end)
 

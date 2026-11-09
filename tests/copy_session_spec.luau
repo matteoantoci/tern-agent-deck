@@ -84,7 +84,7 @@ end
 t.test("a subagent's right-click menu copies its own session file, in its agent's session folder", function()
 	local folder = string.sub(SESSION, 1, -#".jsonl" - 1)
 	local v = withSubagents(SESSION)
-	t.eq(visible.menu(v, "Ticket07 "), {
+	t.eq(visible.menu(v, "(Running) Ticket07"), {
 		"Copy session ID → copy-id=" .. folder .. "/Ticket07.jsonl",
 		"Copy session path → copy-path=" .. folder .. "/Ticket07.jsonl",
 	})

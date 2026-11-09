@@ -67,21 +67,21 @@ end
 t.test("while omp shows a subagent, its agent keeps the subagent rows and the shown one is selected", function()
 	local out = after(nil, dock({ "Ticket07" }), 7)
 	t.eq(visible.agentRows(out), {
-		"●(Working) Lead …",
+		"●(Working) Lead",
 		"○(Not live) Ticket03 task",
-		"●(Running) Ticket07 task …",
+		"●(Running) Ticket07 task",
 		"○(Not live) Merge0407>Ticket04 task · in Ticket07",
-		"●(Working) Other …",
+		"●(Working) Other",
 	})
-	t.eq(visible.selected(out), { "●(Running) Ticket07 task …" })
+	t.eq(visible.selected(out), { "●(Running) Ticket07 task" })
 	t.eq(visible.hover(out, "Ticket03"), "Ticket03 · Not live\nRole task\nNot updated while omp shows another subagent")
 end)
 
 t.test("the dots of working agents and running subagents pulse; a not-live subagent's dot stays still", function()
 	t.eq(visible.pulsing(after(nil, dock({ "Ticket07" }), 7)), {
-		"●(Working) Lead …",
-		"●(Running) Ticket07 task …",
-		"●(Working) Other …",
+		"●(Working) Lead",
+		"●(Running) Ticket07 task",
+		"●(Working) Other",
 	})
 end)
 
@@ -93,36 +93,36 @@ t.test("a sibling that finished while omp showed another subagent shows as done 
 		incomplete = false,
 	}
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
-		"●(Working) Lead …",
-		"●(Running) Ticket07 task …",
+		"●(Working) Lead",
+		"●(Running) Ticket07 task",
 		":check 1 subagent done",
-		"●(Working) Other …",
+		"●(Working) Other",
 	})
 end)
 
 t.test("once omp shows the main session again, the rows follow the reads and the agent's row is selected", function()
 	local out = after(nil, dock(nil), 7)
-	t.eq(visible.agentRows(out), { "●(Working) Lead …", "●(Working) Other …" })
-	t.eq(visible.selected(out), { "●(Working) Lead …" })
+	t.eq(visible.agentRows(out), { "●(Working) Lead", "●(Working) Other" })
+	t.eq(visible.selected(out), { "●(Working) Lead" })
 	local read: any = { agents = { sub("Ticket03") }, incomplete = false }
-	t.eq(visible.agentRows(after(read, dock(nil), 7)), { "●(Working) Lead …", "●(Running) Ticket03 task …", "●(Working) Other …" })
+	t.eq(visible.agentRows(after(read, dock(nil), 7)), { "●(Working) Lead", "●(Running) Ticket03 task", "●(Working) Other" })
 end)
 
 t.test("a nested subagent omp shows is selected by its full id", function()
 	t.eq(
 		visible.selected(after(nil, dock({ "Merge0407", "Merge0407.Ticket04" }), 7)),
-		{ "●(Running) Merge0407>Ticket04 task · in Ticket07 …" }
+		{ "●(Running) Merge0407>Ticket04 task · in Ticket07" }
 	)
 end)
 
 t.test("while another agent is focused, its row stays the selected one", function()
 	local out = after(nil, dock({ "Ticket07" }), 9)
-	t.eq(visible.selected(out), { "●(Working) Other …" })
+	t.eq(visible.selected(out), { "●(Working) Other" })
 	t.eq(#visible.agentRows(out), 5)
 end)
 
 t.test("a shown subagent the last read did not list leaves the agent's row selected", function()
-	t.eq(visible.selected(after(nil, dock({ "Gone" }), 7)), { "●(Working) Lead …" })
+	t.eq(visible.selected(after(nil, dock({ "Gone" }), 7)), { "●(Working) Lead" })
 end)
 
 return nil

@@ -53,7 +53,7 @@ t.test("a pinned working agent keeps its subagent rows in Pinned", function()
 		agents = { agent({ pane = 7, title = "Lead", state = "working", workingSince = 0 }) },
 		pins = { { pane = 7, cwd = REPO, title = "Lead" } },
 		subagents = { [7] = { agents = { { id = "dx.A", name = "A", status = "running", depth = 1 } }, incomplete = false } },
-	})), { ":pin Pinned 1", "●(Working) Lead …", "●(Running) A …" })
+	})), { ":pin Pinned 1", "●(Working) Lead", "●(Running) A" })
 end)
 
 t.test("when the pane id changed, a pin finds its agent by working directory and title", function()

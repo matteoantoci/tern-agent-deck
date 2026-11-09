@@ -72,9 +72,9 @@ t.test("a scoped read shows each running subagent with its model, current tool a
 		subagents = { [7] = subagents.extract(tree) :: any },
 	}).view
 	t.eq(visible.agentRows(view), {
-		"●(Working) Lead …",
-		"●(Running) Ticket03 …",
-		"●(Running) Ticket07 …",
+		"●(Working) Lead",
+		"●(Running) Ticket03",
+		"●(Running) Ticket07",
 		":check 1 subagent done",
 	})
 	t.eq(visible.hover(view, "Ticket03"), "Ticket03 · Running\nModel claude-opus-5-5")
@@ -148,11 +148,11 @@ t.test("subagents at every level show in one flat list under their agent, each n
 		subagents = { [7] = subagents.extract(tree) :: any },
 	}).view
 	t.eq(visible.agentRows(view), {
-		"●(Working) Lead …",
-		"●(Running) Merge0407 task …",
-		"●(Running) Ticket04 task · in Merge0407 …",
-		"●(Running) Probe scout · in Ticket04 …",
-		"●(Running) Docs task …",
+		"●(Working) Lead",
+		"●(Running) Merge0407 task",
+		"●(Running) Ticket04 task · in Merge0407",
+		"●(Running) Probe scout · in Ticket04",
+		"●(Running) Docs task",
 		":check 1 subagent done",
 	})
 	t.eq(visible.hover(view, "Probe"), "Probe · Running\nRole scout\nUnder Ticket04")
