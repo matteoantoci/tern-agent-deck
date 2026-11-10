@@ -24,20 +24,36 @@ local function walk(node: TspNode?, visit: (TspNode) -> ())
 	end
 end
 
---- The ids of every running `task` tool node in `tree`, in tree order (oldest call first); empty when none runs.
-function subagents.runningTasks(tree: any): { string }
+-- The ids of the `task` tool nodes in `tree` whose status passes `keep`, in tree order (oldest call first).
+local function tasks(tree: any, keep: (status: any) -> boolean): { string }
 	local found: { string } = {}
 	if type(tree) ~= "table" then
 		return found
 	end
 	for _, region in REGIONS do
 		walk(tree[region], function(node)
-			if isTask(node) and (node.p :: any).status == "running" then
+			if isTask(node) and keep((node.p :: any).status) then
 				table.insert(found, node.id)
 			end
 		end)
 	end
 	return found
+end
+
+--- The ids of every running `task` tool node in `tree`, in tree order (oldest call first); empty when none runs.
+function subagents.runningTasks(tree: any): { string }
+	return tasks(tree, function(status)
+		return status == "running"
+	end)
+end
+
+--- The ids of every `task` tool node in `tree` that no longer runs, in tree order. omp shows an agent that runs again
+--- after its call ended (a message revived or woke it, or it kept running after a cancel) as running in that call's
+--- card, while the call keeps its final status.
+function subagents.settledTasks(tree: any): { string }
+	return tasks(tree, function(status)
+		return status ~= "running" and status ~= "pending"
+	end)
 end
 
 --- One subagent: its `agent` node's id and props, how many agents it sits under (1: the task call's own), and the
@@ -111,16 +127,18 @@ local function level(thinking: any): string?
 end
 
 --- The subagents in a read with `root` set to a `task` node, in tree order, at every level: omp puts a subagent's
---- own subagents as `agent` children of its node. Nil when that node is no longer a running `task` call (it ended,
---- or the id now names another node).
+--- own subagents as `agent` children of its node. For a call that no longer runs, only its agents that run again,
+--- with their own subagents. Nil when that node is no longer a `task` call (the id now names another node), or
+--- when the call ended and none of its agents runs.
 function subagents.extract(tree: any): Subagents?
 	if type(tree) ~= "table" or type(tree.main) ~= "table" then
 		return nil
 	end
 	local root: TspNode = tree.main
-	if not isTask(root) or (root.p :: any).status ~= "running" then
+	if not isTask(root) then
 		return nil
 	end
+	local settled = (root.p :: any).status ~= "running"
 	local out: Subagents = { agents = {}, incomplete = (tonumber(tree.more) or 0) > 0 }
 	local function visit(node: TspNode, depth: number, parent: string?)
 		if (tonumber(node.more) or 0) > 0 then
@@ -157,7 +175,24 @@ function subagents.extract(tree: any): Subagents?
 			end
 		end
 	end
-	visit(root, 0, nil)
+	if settled then
+		if (tonumber(root.more) or 0) > 0 then
+			out.incomplete = true
+		end
+		if type(root.c) == "table" then
+			for _, child in root.c do
+				local p = child.p
+				if child.k == "agent" and type(p) == "table" and p.status == "running" then
+					visit(child, 0, nil)
+				end
+			end
+		end
+		if #out.agents == 0 then
+			return nil
+		end
+	else
+		visit(root, 0, nil)
+	end
 	return out
 end
 
@@ -187,6 +222,19 @@ function subagents.merge(reads: { Subagents }): Subagents?
 		out.incomplete = out.incomplete or read.incomplete
 	end
 	return out
+end
+
+--- How many of the subagents in `reads` run, at every level.
+function subagents.runningCount(reads: { Subagents }): number
+	local n = 0
+	for _, read in reads do
+		for _, agent in read.agents do
+			if agent.status == "running" then
+				n = n + 1
+			end
+		end
+	end
+	return n
 end
 
 --- The working agent to read on this tick: the lowest pane after `last`, wrapping round; nil when none works.

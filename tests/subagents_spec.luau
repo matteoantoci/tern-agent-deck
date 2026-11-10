@@ -174,4 +174,31 @@ t.test("a scoped read whose task call has ended gives no subagents", function()
 	t.eq(subagents.extract(nil), nil)
 end)
 
+t.test("an agent that runs again after its call ended shows alone, with its own subagents, and the ended calls are found", function()
+	local tree = chat({
+		task("5h", "done", {}),
+		task("ab", "running", {}),
+		task("mm", "error", {}),
+		task("np", "pending", {}),
+	})
+	t.eq(subagents.settledTasks(tree), { "5h", "mm" })
+	local cut = task("mm", "error", {
+		agent("PrepareCs", "aborted"),
+		agent("PreparePsc", "running", { tool = { name = "bash", intent = "Running tests" } }, {
+			agent("Lint", "running", { depth = 1 }),
+		}),
+		agent("PrepareBo", "running"),
+	})
+	cut.more = 1
+	local subs = subagents.extract(scoped(cut)) :: any
+	local shown = {}
+	for _, a in subs.agents do
+		table.insert(shown, a.name .. "|" .. a.status .. "@" .. a.depth .. " under " .. tostring(a.parent))
+	end
+	t.eq(shown, { "PreparePsc|running@1 under nil", "Lint|running@2 under PreparePsc", "PrepareBo|running@1 under nil" })
+	t.eq(subs.incomplete, true)
+	t.eq(subagents.runningCount({ subs }), 3)
+	t.eq(subagents.extract(scoped(task("mm", "error", { agent("PrepareCs", "aborted") }))), nil, "none runs again")
+end)
+
 return nil

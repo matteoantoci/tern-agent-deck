@@ -46,10 +46,15 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   and the toast that says so, from the start of the file.
 - `lib/subagent_reader.luau`: the subagent reader. On each tick it reads the TSP surface of one working agent, in
   rotation: a find read lists the running `task` tool nodes (again once 5 s passed since that agent's last find read,
-  or when a call ended), the reads in between set `root` to each of them.
-- `lib/subagents.luau`: pure helpers for the reader: find the running `task` nodes and turn their `agent` nodes, at
-  every nesting level, into subagents (node id, name, state, depth, parent, type, effort, model, tool). It uses no
-  `if … then … else` expression, so a Carly probe can `loadstring` it.
+  or when a call ended), the reads in between set `root` to each of them. While omp's HUD counts more running
+  subagents than the running calls hold, the find read also reads the ended calls: an agent that runs again after
+  its call ended (an IRC message revived or woke it, or it kept running after a cancel) shows as running in that
+  call's card. omp draws it so from the build that carries the revived-agent card fix; an older omp keeps the card's
+  final status, and the agent does not show.
+- `lib/subagents.luau`: pure helpers for the reader: find the running and the ended `task` nodes and turn their
+  `agent` nodes, at every nesting level, into subagents (node id, name, state, depth, parent, type, effort, model,
+  tool); from an ended call, only the agents that run again. It uses no `if … then … else` expression, so a Carly
+  probe can `loadstring` it.
 - `lib/hud.luau`: the pure reader of omp's HUD agents counter in a read of the dock (`…running/agents`): whether the
   session has running subagents, so that the reader polls an idle agent again after a plugin reload.
 - `lib/effort_reader.luau`: the effort reader. On `agent_state`, `agent_finished` and at start (never on the tick) it

@@ -1,6 +1,8 @@
 --!strict
 -- The subagent reader: on each tick it reads the subagents of one polled agent (working, or idle with running subagents), in rotation, from the TSP `agent`
--- nodes of its surface. A find read lists the running `task` tool nodes; the reads in between set `root` to each.
+-- nodes of its surface. A find read lists the running `task` tool nodes, and the ended ones when omp's HUD counts more
+-- running subagents than the running calls hold (an agent that runs again after its call ended); the reads in
+-- between set `root` to each node found with a running subagent.
 -- Measured 2026-11-09 on a chat of about 1400 nodes: the whole chat 11 to 19 ms, the find read 2.3 ms, a `root`
 -- read 0.1 to 0.3 ms.
 
@@ -26,22 +28,23 @@ local DOCK_NODES = 800
 -- Measured 2026-11-09 on pane 17179869199: the dock read took 0.37 to 0.57 ms.
 local CHECK_AFTER = 5000
 
--- The subagents of each polled agent whose last read found a running `task` call.
+-- The subagents of each polled agent whose last read found a running subagent.
 local found: { [number]: subagents.Subagents } = {}
--- The ids of the running `task` nodes of each such agent, in the order of the calls.
+-- The ids of the `task` nodes of each such agent that hold a running subagent, in the order of the calls.
 local taskNodes: { [number]: { string } } = {}
 -- The `tern.now()` of each pane's last find read.
 local foundAt: { [number]: number } = {}
 -- The omp id of the subagent each working agent's omp shows in its view, by pane.
 local shown: { [number]: string } = {}
--- The panes whose omp HUD, at their last dock read, counted running subagents.
-local counting: { [number]: boolean } = {}
+-- The number of running subagents that each pane's omp HUD counted at its last dock read, for the panes where it
+-- counted some.
+local counting: { [number]: number } = {}
 -- The `tern.now()` of each unpolled live pane's last HUD check.
 local checkedAt: { [number]: number } = {}
 -- The agent the last tick read.
 local last: number? = nil
 
--- The subagents of the `task` calls `ids`; nil when one of them is no longer a running `task` call.
+-- The subagents of the `task` calls `ids`; nil when one of them no longer holds a running subagent.
 local function scoped(cx: WindowCx, pane: number, ids: { string }): subagents.Subagents?
 	local reads: { subagents.Subagents } = {}
 	for _, id in ids do
@@ -54,6 +57,23 @@ local function scoped(cx: WindowCx, pane: number, ids: { string }): subagents.Su
 	return subagents.merge(reads)
 end
 
+-- Adds to `ids` and `reads` each of the `task` calls `candidates` that holds a running subagent.
+local function collect(
+	cx: WindowCx,
+	pane: number,
+	candidates: { string },
+	ids: { string },
+	reads: { subagents.Subagents }
+)
+	for _, id in candidates do
+		local subs = subagents.extract(cx.session:surface(pane, { root = id, nodes = NODES }))
+		if subs then
+			table.insert(ids, id)
+			table.insert(reads, subs)
+		end
+	end
+end
+
 local function read(cx: WindowCx, pane: number, now: number): subagents.Subagents?
 	local known = taskNodes[pane]
 	if known and now - (foundAt[pane] or 0) < FIND_AFTER then
@@ -64,12 +84,20 @@ local function read(cx: WindowCx, pane: number, now: number): subagents.Subagent
 	end
 	taskNodes[pane] = nil
 	foundAt[pane] = now
-	local ids = subagents.runningTasks(cx.session:surface(pane, { nodes = NODES, depth = FIND_DEPTH }))
+	local tree = cx.session:surface(pane, { nodes = NODES, depth = FIND_DEPTH })
+	local ids: { string } = {}
+	local reads: { subagents.Subagents } = {}
+	collect(cx, pane, subagents.runningTasks(tree), ids, reads)
+	-- An agent that runs again after its call ended shows in that call's card: read the ended calls only while the
+	-- HUD counts more running subagents than the running calls hold.
+	if subagents.runningCount(reads) < (counting[pane] or 0) then
+		collect(cx, pane, subagents.settledTasks(tree), ids, reads)
+	end
 	if #ids == 0 then
 		return nil
 	end
 	taskNodes[pane] = ids
-	return scoped(cx, pane, ids)
+	return subagents.merge(reads)
 end
 
 --- The subagents of each working agent's running `task` calls, by pane: the view model's `subagents` input.
@@ -91,10 +119,11 @@ local function dock(cx: WindowCx, pane: number): any
 	return if ok then tree else nil
 end
 
--- Notes whether `tree`, a read of `pane`'s dock, shows omp's HUD counting running subagents.
+-- Notes how many running subagents `tree`, a read of `pane`'s dock, shows omp's HUD counting.
 local function count(pane: number, tree: any)
-	if hud.running(tree) > 0 then
-		counting[pane] = true
+	local n = hud.running(tree)
+	if n > 0 then
+		counting[pane] = n
 	else
 		counting[pane] = nil
 	end
