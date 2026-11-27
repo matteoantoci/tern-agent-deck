@@ -356,9 +356,9 @@ function visible.selected(view: Node): { string }
 	return out
 end
 
---- The rows drawn with this tab's accent (a light accent fill and a bar at the left), one line each: the selected
---- agent row, the first row of a block drawn with the accent (an agent with its subagent lines), and the closed
---- "Older than a day" line while this tab's agent sits under it.
+--- The rows drawn with this tab's accent (a light accent fill and a bar at the left), one line each: the first row of
+--- each block drawn with the accent (this tab's agent with its subagent lines, or the closed "Older than a day" line
+--- while this tab's agent sits under it).
 function visible.accented(view: Node): { string }
 	local out: { string } = {}
 	local function walk(n: Node)
@@ -374,9 +374,6 @@ function visible.accented(view: Node): { string }
 			return
 		end
 		if n.k == "row" and not hasRow(n) then
-			if role == "agents.on.0" then
-				table.insert(out, line(n))
-			end
 			return
 		end
 		for _, child in kids(n) do

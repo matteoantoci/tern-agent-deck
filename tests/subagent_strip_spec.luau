@@ -5,6 +5,8 @@
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
+local patch = require("../lib/patch")
+local canvas = require("./canvas")
 
 local function sub(name: string, status: string, depth: number?, extra: { [string]: any }?): { [string]: any }
 	local s: { [string]: any } = { id = (string.gsub(name, ">", ".")), name = name, status = status, depth = depth or 1 }
@@ -420,6 +422,58 @@ end)
 t.test("siblings first seen at the same time draw in omp id order", function()
 	local out = view("working", { sub("Zed", "running", 1, { firstSeen = 5 }), sub("Amy", "running", 1, { firstSeen = 5 }) })
 	t.eq(lineNames(out), { "Amy", "Zed" })
+end)
+
+-- The `set` path of the node keyed `key` in `node`, as a patch names it (nil when no node has that key).
+local function pathOf(node: any, key: string, prefix: string?): string?
+	for _, child in node.c or {} do
+		local own = child.p and child.p.key
+		local here = if own then (if prefix then prefix .. "." .. own else own) else nil
+		if own == key then
+			return here
+		end
+		local found = here and pathOf(child, key, here)
+		if found then
+			return found
+		end
+	end
+	return nil
+end
+
+-- What a patch from `old` to `new` does to Lead's row: "same path" when the row keeps its place (else both paths), then
+-- each entry of the `set` at the row's path or above it, `-` for a removal and `=` for a node sent in its place.
+local function rowPatch(old: any, new: any): { string }
+	local was, now = pathOf(old, "agent-7"), pathOf(new, "agent-7")
+	local out: { string } = { if was == now then "same path" else tostring(was) .. " -> " .. tostring(now) }
+	local change = patch.diff(old, 0, new, 0)
+	local entries: { string } = {}
+	for path, node in (change and change.set or {}) :: { [string]: any } do
+		if now and (path == now or string.sub(now, 1, #path + 1) == path .. ".") then
+			table.insert(entries, (if node == false then "-" else "=") .. (if path == now then "row" else "above"))
+		end
+	end
+	table.sort(entries)
+	for _, entry in entries do
+		table.insert(out, entry)
+	end
+	t.eq(canvas.apply(old, change), new)
+	return out
+end
+
+t.test("a fold or an unfold, or a crew that starts or ends, keeps the agent's row in its place: never removed and added again", function()
+	local crew = { sub("A", "running"), sub("B", "running") }
+	for _, focus in { 0, 7 } do
+		local focused = if focus == 0 then nil else focus
+		local open = view("working", crew, { focused = focused })
+		local closed = view("working", crew, { focused = focused, closed = CLOSED })
+		local alone = view("working", {}, { focused = focused })
+		-- A fold sends Lead's row in its place and removes the lines.
+		t.eq(rowPatch(open, closed), { "same path", "=row" })
+		-- Two lines that come back at once cannot be patched in order: the block that holds the row is sent whole.
+		t.eq(rowPatch(closed, open), { "same path", "=above" })
+		t.eq(rowPatch(alone, open), { "same path", "=above" })
+		t.eq(rowPatch(open, alone), { "same path", "=row" })
+	end
 end)
 
 return nil
