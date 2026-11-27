@@ -67,16 +67,17 @@ local setFailed = false
 local segments: { viewModel.Segment } = {}
 local titles: { [number]: string } = {}
 local latest: viewModel.Input? = nil
--- The pane the user last focused outside the sidebar: its agent's row shows selected, and "New tab here" opens in
--- its folder. A click on the sidebar focuses the sidebar, which keeps the last one.
-local lastFocused: number? = nil
-
-local function focusedPane(cx: WindowCx): number?
+-- This tab's agent: its row shows selected, and "New tab here" opens in its folder. The focused pane when it runs
+-- an agent (kept in `store`, so that a plugin reload keeps it); else the fallbacks of `viewModel.thisTabAgent` in the
+-- tab in front. A click on the sidebar focuses the sidebar, which keeps the agent focused before it.
+local function thisTabAgent(cx: WindowCx, agents: { viewModel.Agent }): number?
 	local focused = cx.session:focused()
-	if focused and not copies[focused] then
-		lastFocused = focused
+	local activeTab = focused and cx.session:tab_of(focused)
+	local pane = viewModel.thisTabAgent(agents, focused, activeTab, store.focused())
+	if pane ~= nil and pane == focused then
+		store.setFocused(pane)
 	end
-	return lastFocused
+	return pane
 end
 
 local function str(value: any): string?
@@ -191,7 +192,7 @@ local function snapshot(cx: WindowCx): viewModel.Input
 		routes = sessionReader.models(),
 		quotas = quotaReader.quotas(),
 		cost = costReader.costs(),
-		focused = focusedPane(cx),
+		focused = thisTabAgent(cx, agents),
 		plugin = tern.plugin.id,
 	})
 end
@@ -787,12 +788,20 @@ function sidebar.subagentClick(cx: WindowCx, pane: number, id: string)
 	end
 end
 
---- Opens a new tab in the repo of the focused agent (or of the focused pane's folder when it runs no agent); the
---- sidebar's own pane counts as the pane focused before it. With no folder known, Tern's own New tab runs.
+--- Opens a new tab in the repo of the focused agent (or of the focused pane's folder when it runs no agent); with
+--- the sidebar's own pane focused, this tab's agent counts. With no folder known, Tern's own New tab runs.
 function sidebar.newTabHere(cx: WindowCx)
-	local focused = focusedPane(cx)
+	local blocks = cx.agents:list()
+	local focused = cx.session:focused()
+	if not focused or copies[focused] then
+		local agents: { viewModel.Agent } = {}
+		for _, block in blocks do
+			table.insert(agents, { pane = block.pane, state = block.state, tab = cx.session:tab_of(block.pane) } :: any)
+		end
+		focused = thisTabAgent(cx, agents)
+	end
 	local cwd: string? = nil
-	for _, block in cx.agents:list() do
+	for _, block in blocks do
 		if block.pane == focused then
 			cwd = str(block.cwd)
 			break

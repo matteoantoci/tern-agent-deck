@@ -34,5 +34,6 @@ require("./hover_card_spec")
 require("./costs_spec")
 require("./cost_reader_spec")
 require("./cost_card_spec")
+require("./this_tab_spec")
 
 t.run()
