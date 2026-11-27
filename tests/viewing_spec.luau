@@ -67,11 +67,11 @@ end
 t.test("while omp shows a subagent, its agent keeps the subagent rows and the shown one is selected", function()
 	local out = after(nil, dock({ "Ticket07" }), 7)
 	t.eq(visible.agentRows(out), {
-		":sparkle(Working) Lead [▮ ▮ ▮] 0s",
+		":terminal(Working) Lead [▮ ▮ ▮] 0s",
 		"■(Not live) Ticket03 task",
 		"■(Running) Ticket07 task",
 		"■(Not live) Ticket04 task",
-		":sparkle(Working) Other 0s",
+		":terminal(Working) Other 0s",
 	})
 	t.eq(visible.selected(out), { "■(Running) Ticket07 task" })
 	t.eq(
@@ -84,11 +84,11 @@ end)
 t.test("a not-live subagent's square says so, while the running ones show running", function()
 	t.eq(visible.states(after(nil, dock({ "Ticket07" }), 7)), {
 		"working: ■ Working 2 busy",
-		"working: :sparkle(Working) Lead [▮ ▮ ▮] 0s",
+		"working: :terminal(Working) Lead [▮ ▮ ▮] 0s",
 		"frozen: ■(Not live) Ticket03 task",
 		"running: ■(Running) Ticket07 task",
 		"frozen: ■(Not live) Ticket04 task",
-		"working: :sparkle(Working) Other 0s",
+		"working: :terminal(Working) Other 0s",
 	})
 end)
 
@@ -100,21 +100,21 @@ t.test("a sibling that finished while omp showed another subagent loses its line
 		incomplete = false,
 	}
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
-		":sparkle(Working) Lead [▮] 0s",
+		":terminal(Working) Lead [▮] 0s",
 		"■(Running) Ticket07 task",
-		":sparkle(Working) Other 0s",
+		":terminal(Working) Other 0s",
 	})
 end)
 
 t.test("once omp shows the main session again, the rows follow the reads and the agent's row is selected", function()
 	local out = after(nil, dock(nil), 7)
-	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead 0s", ":sparkle(Working) Other 0s" })
-	t.eq(visible.selected(out), { ":sparkle(Working) Lead 0s" })
+	t.eq(visible.agentRows(out), { ":terminal(Working) Lead 0s", ":terminal(Working) Other 0s" })
+	t.eq(visible.selected(out), { ":terminal(Working) Lead 0s" })
 	local read: any = { agents = { sub("Ticket03") }, incomplete = false }
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
-		":sparkle(Working) Lead [▮] 0s",
+		":terminal(Working) Lead [▮] 0s",
 		"■(Running) Ticket03 task",
-		":sparkle(Working) Other 0s",
+		":terminal(Working) Other 0s",
 	})
 end)
 
@@ -144,9 +144,9 @@ end
 t.test("the subagent omp shows keeps its line when done, selected, with no strip and no toggle", function()
 	local out = showing({ sub("Ticket03", 1, { status = "done" }), sub("Ticket07", 1, { status = "done" }) }, "Ticket07", 7)
 	t.eq(visible.agentRows(out), {
-		":sparkle(Working) Lead 0s",
+		":terminal(Working) Lead 0s",
 		"■(Done) Ticket07 task",
-		":sparkle(Working) Other 0s",
+		":terminal(Working) Other 0s",
 	})
 	t.eq(visible.selected(out), { "■(Done) Ticket07 task" })
 end)
@@ -154,10 +154,10 @@ end)
 t.test("the subagent omp shows keeps its line when stopped, next to the running ones of an open strip", function()
 	local out = showing({ sub("Ticket03"), sub("Ticket07", 1, { status = "aborted" }) }, "Ticket07", 7)
 	t.eq(visible.agentRows(out), {
-		":sparkle(Working) Lead [▮] 0s",
+		":terminal(Working) Lead [▮] 0s",
 		"■(Not live) Ticket03 task",
 		"■(Stopped) Ticket07 task",
-		":sparkle(Working) Other 0s",
+		":terminal(Working) Other 0s",
 	})
 	t.eq(visible.selected(out), { "■(Stopped) Ticket07 task" })
 end)
@@ -168,9 +168,9 @@ t.test("a done nested subagent omp shows keeps its line alone at its depth", fun
 		sub("Ticket07>Ticket04", 2, { parent = "Ticket07", status = "done" }),
 	}, "Ticket07.Ticket04", 7)
 	t.eq(visible.agentRows(out), {
-		":sparkle(Working) Lead 0s",
+		":terminal(Working) Lead 0s",
 		"■(Done) Ticket04 task",
-		":sparkle(Working) Other 0s",
+		":terminal(Working) Other 0s",
 	})
 	t.eq(visible.selected(out), { "■(Done) Ticket04 task" })
 end)
@@ -178,11 +178,11 @@ end)
 t.test("while another agent is focused, the done subagent omp shows keeps its line but not the selection", function()
 	local out = showing({ sub("Ticket07", 1, { status = "done" }) }, "Ticket07", 9)
 	t.eq(visible.agentRows(out), {
-		":sparkle(Working) Other 0s",
-		":sparkle(Working) Lead 0s",
+		":terminal(Working) Other 0s",
+		":terminal(Working) Lead 0s",
 		"■(Done) Ticket07 task",
 	})
-	t.eq(visible.selected(out), { ":sparkle(Working) Other 0s" })
+	t.eq(visible.selected(out), { ":terminal(Working) Other 0s" })
 end)
 
 t.test("once omp shows the main session again, the done subagent loses its line", function()
@@ -194,7 +194,7 @@ t.test("once omp shows the main session again, the done subagent loses its line"
 		subagents = subs,
 		focused = 7,
 	}).view
-	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead 0s" })
+	t.eq(visible.agentRows(out), { ":terminal(Working) Lead 0s" })
 end)
 
 t.test("under a closed strip, the subagent omp shows keeps a flat line like a failure, selected when focused", function()
@@ -211,22 +211,22 @@ t.test("under a closed strip, the subagent omp shows keeps a flat line like a fa
 		subsOpen = { [7] = false },
 		focused = 7,
 	}).view
-	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead [▮] 0s", "■(Done) Ticket04 task" })
+	t.eq(visible.agentRows(out), { ":terminal(Working) Lead [▮] 0s", "■(Done) Ticket04 task" })
 	t.eq(visible.selected(out), { "■(Done) Ticket04 task" })
 end)
 
 t.test("while another agent is focused, its row stays the selected one and the shown subagent keeps a flat line", function()
 	local out = after(nil, dock({ "Ticket07" }), 9)
-	t.eq(visible.selected(out), { ":sparkle(Working) Other 0s" })
+	t.eq(visible.selected(out), { ":terminal(Working) Other 0s" })
 	t.eq(visible.agentRows(out), {
-		":sparkle(Working) Other 0s",
-		":sparkle(Working) Lead [▮ ▮ ▮] 0s",
+		":terminal(Working) Other 0s",
+		":terminal(Working) Lead [▮ ▮ ▮] 0s",
 		"■(Running) Ticket07 task",
 	})
 end)
 
 t.test("a shown subagent the last read did not list leaves the agent's row selected", function()
-	t.eq(visible.selected(after(nil, dock({ "Gone" }), 7)), { ":sparkle(Working) Lead [▮ ▮ ▮] 0s" })
+	t.eq(visible.selected(after(nil, dock({ "Gone" }), 7)), { ":terminal(Working) Lead [▮ ▮ ▮] 0s" })
 end)
 
 return nil

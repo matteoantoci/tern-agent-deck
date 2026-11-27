@@ -30,7 +30,7 @@ t.test("a working row's hover card counts the turn from its start", function()
 end)
 
 t.test("an agent whose title holds only omp's icon shows its folder name", function()
-	t.eq(rows({ agent({ title = ICON .. " ", cwd = "/Users/me/Personal/tern-agents" }) }), { ":sparkle(Idle) tern-agents" })
+	t.eq(rows({ agent({ title = ICON .. " ", cwd = "/Users/me/Personal/tern-agents" }) }), { ":terminal(Idle) tern-agents" })
 end)
 
 t.test("the hover card names the model without its glyph and with no logo", function()

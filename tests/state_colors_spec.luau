@@ -24,11 +24,11 @@ t.test("each agent state puts its own state on the title icon, and each zone its
 	}).view
 	t.eq(visible.states(out), {
 		"waiting: ■ Needs you 1",
-		"waiting: :sparkle(Waiting for you) b",
+		"waiting: :terminal(Waiting for you) b",
 		"working: ■ Working 1 busy",
-		"working: :sparkle(Working) a 0s",
+		"working: :terminal(Working) a 0s",
 		"idle: ■ Idle 1",
-		"idle: :sparkle(Idle) c",
+		"idle: :terminal(Idle) c",
 	})
 end)
 
@@ -50,7 +50,7 @@ t.test("each subagent state puts its own state on its line's square", function()
 	}).view
 	t.eq(visible.states(live), {
 		"working: ■ Working 1 busy",
-		"working: :sparkle(Working) Lead [▮] 0s",
+		"working: :terminal(Working) Lead [▮] 0s",
 		"running: ■(Running) A",
 		"waiting: ■(Waiting on its subagents) B",
 	})

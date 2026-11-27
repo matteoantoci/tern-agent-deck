@@ -163,7 +163,7 @@ t.test("an agent whose title has no omp icon shows Tern's agent icon in its stat
 		agent({ pane = 1, state = "working", title = "claude", workingSince = 0 }),
 		agent({ pane = 2, title = "", cwd = "/Users/me/codex-work" }),
 	})
-	t.eq(visible.agentRows(out), { ":sparkle(Working) claude 0s", ":sparkle(Idle) codex-work" })
+	t.eq(visible.agentRows(out), { ":terminal(Working) claude 0s", ":terminal(Idle) codex-work" })
 	t.eq(visible.state(out, "claude"), "working")
 	t.eq(visible.state(out, ") codex-work"), "idle")
 end)
@@ -249,7 +249,7 @@ t.test("a pinned agent that stopped is one line in Idle under its project, with 
 		agent({ pane = 1, title = ICON .. " live", activeAt = NOW - 60 }),
 		agent({ pane = 2, state = "exited", title = ICON .. " Done", sessionFile = "/s/done.jsonl", activeAt = NOW - 3 * 3600 }),
 	}, { pins = { { pane = 2, cwd = DECK, title = ICON .. " Done" } } })
-	t.eq(visible.zones(out), { "■ Idle 2 · 1 stopped" })
+	t.eq(visible.zones(out), { "■ Idle 1 idle · 1 stopped" })
 	t.eq(visible.zone(out, "Idle"), { DECK_LABEL, ICON .. "(Idle) live 1m", ICON .. "(Stopped) Done 3h :play" })
 	t.eq(visible.onHover(out, "Done"), { ":play" })
 	t.eq(visible.state(out, "Done"), "stopped")

@@ -407,8 +407,8 @@ local function squareNode(state: State, label: string?): Node
 end
 
 -- Tern's icon for an agent whose title has no omp icon (an agent that is not omp, or not titled yet). Tern ships no
--- icon named "agent"; `sparkle` is the one its aliases give a model.
-local AGENT_ICON = "sparkle"
+-- icon named "agent"; `terminal` is a name in its icon table.
+local AGENT_ICON = "terminal"
 
 -- The icon character omp puts at the start of a title, or nil when the title has none or no text follows it.
 local function titleGlyph(title: string?): string?
@@ -1577,12 +1577,12 @@ function viewModel.redrawDue(input: Input): number?
 	return due
 end
 
--- A closed session: its title icon, its title (or "Untitled"), how long ago it was last written and, while the
+-- A closed session with a title: its title icon, its title, how long ago it was last written and, while the
 -- pointer is on it, the resume icon. A click resumes it in a new tab; a right-click copies its ID or path. Its hover
 -- card says how long ago it closed, its title, its folder and what a click and a right-click do.
 local function sessionRow(session: Session, time: number?, home: string?): Node
 	local seconds = if time then time - session.at else nil
-	local title = plainTitle(session.title) or "Untitled"
+	local title = plainTitle(session.title) or ""
 	local children: { Node } = { titleIcon(session.title, "stopped", "Closed"), nameNode(title) }
 	if seconds then
 		table.insert(children, timeNode(seconds))
@@ -2218,7 +2218,15 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 				table.insert(body, { k = "col", p = { key = "older-list", role = ROLE.older, gap = "none" }, c = groups })
 			end
 		end
-		local status = tostring(#idle + #older) .. (if stopped > 0 then string.format(" · %d stopped", stopped) else "")
+		-- The idle count leaves out the stopped pins, which `idle` also holds: `1 idle · 2 stopped`. With no stopped
+		-- pin the status is the bare count, as the zone's name already says idle.
+		local waiting = #idle + #older - stopped
+		local status = tostring(waiting)
+		if stopped > 0 then
+			status = if waiting > 0
+				then string.format("%d idle · %d stopped", waiting, stopped)
+				else string.format("%d stopped", stopped)
+		end
 		table.insert(children, zone("zone-idle", "idle", "Idle", status, body))
 	end
 	if #children == 0 then
@@ -2235,11 +2243,16 @@ end
 -- there is no closed session. The whole view shows at most the `RECENT_CAP` newest sessions: a canvas update holds at
 -- most 2000 nodes and 256 KiB. The sessions past the cap go into one muted "N more" line that takes no click, on the
 -- last day that shows; a day with no place left does not show. An open Earlier with no place left shows only its
--- own "N more" line.
+-- own "N more" line. The sessions with no title of a day fold into one muted "N untitled" line at its end, which takes
+-- no click and no place of the cap.
 local RECENT_CAP = 50
 
 local function moreLine(key: string, count: number): Node
 	return infoLine(key .. "-more", iconNode("more", "muted"), string.format("%d more", count), "muted", 0)
+end
+
+local function untitledLine(key: string, count: number): Node
+	return infoLine(key .. "-untitled", iconNode(AGENT_ICON, "muted"), string.format("%d untitled", count), "muted", 0)
 end
 
 local function recentBody(input: Input): { Node }
@@ -2262,32 +2275,46 @@ local function recentBody(input: Input): { Node }
 	local hidden = 0
 	local lastBody: { Node }? = nil
 	local lastKey = ""
+	local lastUntitled = false
 	for i, day in days do
 		local sessions = byDay[i]
+		local titled: { Session } = {}
+		for _, session in sessions do
+			if plainTitle(session.title) then
+				table.insert(titled, session)
+			end
+		end
+		local untitled = #sessions - #titled
 		if #sessions > 0 then
 			local key = "day-" .. string.lower((string.gsub(day.name, " ", "-")))
 			if day.name ~= "Earlier" then
-				local take = math.min(budget, #sessions)
-				hidden += #sessions - take
-				if take > 0 then
+				local take = math.min(budget, #titled)
+				hidden += #titled - take
+				if take > 0 or untitled > 0 then
 					budget -= take
-					local body = recentProjects(table.move(sessions, 1, take, 1, {}), input)
-					lastBody, lastKey = body, key
+					local body = recentProjects(table.move(titled, 1, take, 1, {}), input)
+					if untitled > 0 then
+						table.insert(body, untitledLine(key, untitled))
+					end
+					lastBody, lastKey, lastUntitled = body, key, untitled > 0
 					table.insert(children, zone(key, nil, day.name, tostring(#sessions), body))
 				end
 			else
 				local open = input.earlierOpen == true
 				local body: { Node } = { foldRow("head", "Earlier", #sessions, open, "earlier", 0) }
 				if open then
-					local take = math.min(budget, #sessions)
+					local take = math.min(budget, #titled)
 					budget -= take
 					if take > 0 then
-						for _, project in recentProjects(table.move(sessions, 1, take, 1, {}), input) do
+						for _, project in recentProjects(table.move(titled, 1, take, 1, {}), input) do
 							table.insert(body, project)
 						end
 					end
-					if #sessions > take then
-						table.insert(body, moreLine(key, #sessions - take))
+					if #titled > take then
+						table.insert(body, moreLine(key, #titled - take))
+					end
+					if untitled > 0 then
+						table.insert(body, untitledLine(key, untitled))
 					end
 				end
 				table.insert(children, { k = "col", p = { key = key, role = ROLE.zone, gap = "none" }, c = body })
@@ -2295,7 +2322,8 @@ local function recentBody(input: Input): { Node }
 		end
 	end
 	if lastBody and hidden > 0 then
-		table.insert(lastBody, moreLine(lastKey, hidden))
+		-- The "N more" line goes before the day's "N untitled" line, which stays last.
+		table.insert(lastBody, if lastUntitled then #lastBody else #lastBody + 1, moreLine(lastKey, hidden))
 	end
 	if #children == 0 then
 		table.insert(children, { k = "text", p = { key = "calm", role = ROLE.calm, text = "No closed omp sessions yet" } })

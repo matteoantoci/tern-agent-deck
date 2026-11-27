@@ -16,6 +16,8 @@ local PROVIDER: { [string]: string } = {
 	xai = "Grok",
 	["xai-oauth"] = "Grok",
 	["google-antigravity"] = "Gemini",
+	["opencode-go"] = "OpenCode Go",
+	deepai = "DeepAI",
 }
 
 type Status = "ok" | "warning" | "exhausted"

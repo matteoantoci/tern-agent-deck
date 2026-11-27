@@ -95,14 +95,22 @@ t.test("an account named as its provider shows its email's domain when another a
 	t.eq(found[3].account, nil)
 end)
 
-t.test("the known providers take their display names, and an unknown one keeps its own", function()
+t.test("each provider in omp's usage history takes its display name, and an unknown one keeps its own", function()
 	local found = parse({
+		row({ "anthropic", "a@x.com", "5 Hour", "Claude 5 Hour", 0.1, "ok", NOW + DAY }),
 		row({ "xai", "a@x.com", "Weekly", "Weekly", 0.1, "ok", NOW + DAY }),
+		row({ "xai-oauth", "a@x.com", "Weekly", "GrokChat (Weekly)", 0.1, "ok", NOW + DAY }),
 		row({ "google-antigravity", "a@x.com", "Weekly", "Gemini", 0.1, "ok", NOW + DAY }),
-		row({ "opencode-go", "", "Monthly", "Monthly limit", 0.91, "warning", NOW + DAY }),
+		row({ "opencode-go", "a@x.com", "Monthly", "Monthly limit", 0.91, "warning", NOW + DAY }),
+		row({ "deepai", "", "", "Theos", 0.1, "ok", NOW + DAY }),
+		row({ "acme", "", "Monthly", "Monthly limit", 0.91, "warning", NOW + DAY }),
 	})
-	t.eq({ found[1].provider, found[2].provider, found[3].provider }, { "Grok", "Gemini", "opencode-go" })
-	t.eq(found[3].account, nil)
+	local names: { string } = {}
+	for _, q in found do
+		table.insert(names, q.provider)
+	end
+	t.eq(names, { "Claude", "Grok", "Grok", "Gemini", "OpenCode Go", "DeepAI", "acme" })
+	t.eq(found[7].account, nil)
 end)
 
 t.test("a row with a status the plugin does not know is left out", function()

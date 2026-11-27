@@ -44,7 +44,7 @@ end
 
 -- A closed session's line: its title icon, its title, its age and the resume icon.
 local function line(title: string, age: string, glyph: boolean?): string
-	return (if glyph == false then ":sparkle" else ICON) .. "(Closed) " .. title .. " " .. age .. " :play"
+	return (if glyph == false then ":terminal" else ICON) .. "(Closed) " .. title .. " " .. age .. " :play"
 end
 
 local function view(agents: { any }, sessions: { any }, extra: { [string]: any }?): any
@@ -122,12 +122,33 @@ t.test("a session in a subfolder or outside any repo shows under its project's l
 	t.eq(visible.hover(shown, "notes"), "~/notes")
 end)
 
-t.test("an untitled session shows as Untitled with Tern's agent icon", function()
-	t.eq(visible.zone(view({}, { session(1, nil, 30), session(2, "", 5 * MIN) }), "Today"), {
-		DECK_LABEL,
-		line("Untitled", "30s", false),
-		line("Untitled", "5m", false),
-	})
+t.test("the sessions with no title of a day fold into one muted N untitled line at its end, which takes no click", function()
+	local shown = view({}, {
+		session(1, nil, 30),
+		session(2, "Plan", MIN),
+		session(3, "", 5 * MIN),
+		session(4, nil, 13 * HOUR),
+		session(5, nil, 8 * DAY),
+	}, { earlierOpen = true })
+	t.eq(visible.zone(shown, "Today"), { DECK_LABEL, line("Plan", "1m", false), ":terminal 2 untitled" })
+	t.eq(visible.zone(shown, "Yesterday"), { ":terminal 1 untitled" })
+	t.eq(visible.zone(shown, "Earlier"), { ":terminal 1 untitled" })
+	t.eq(visible.zones(shown)[1], "Today 3")
+	t.eq(visible.click(shown, "2 untitled"), nil)
+	t.eq(visible.menu(shown, "2 untitled"), {})
+end)
+
+t.test("the untitled sessions take no place of the 50-session cap, and the N more line comes before them", function()
+	local many: { any } = {}
+	for n = 1, 60 do
+		table.insert(many, session(n, "T" .. n, n * MIN, { file = SESSIONS .. n .. ".jsonl" }))
+	end
+	for n = 61, 70 do
+		table.insert(many, session(n, nil, n * MIN, { file = SESSIONS .. n .. ".jsonl" }))
+	end
+	local lines = visible.zone(view({}, many), "Today")
+	t.eq(#lines, 53)
+	t.eq({ lines[52], lines[53] }, { ":more 10 more", ":terminal 10 untitled" })
 end)
 
 t.test("a click on a session resumes its file in a new tab; the resume icon shows on hover", function()
@@ -162,8 +183,7 @@ end)
 
 t.test("a live agent whose session has no title yet hides the newest untitled session of its folder", function()
 	t.eq(visible.zone(view({ agent({ title = "omp" }) }, { session(1, nil, MIN), session(2, nil, HOUR) }), "Today"), {
-		DECK_LABEL,
-		line("Untitled", "1h", false),
+		":terminal 1 untitled",
 	})
 end)
 
