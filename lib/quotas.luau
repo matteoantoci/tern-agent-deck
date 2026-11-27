@@ -40,14 +40,17 @@ local function window(label: string): string
 end
 
 -- The window as the line shows it, with the qualifier that ends the limit's name (`Claude 7 Day (Fable)` → `7d
--- Fable`), so that two limits of one window stay apart; a qualifier that only repeats the window
--- (`GrokChat (Weekly)`) is left out.
+-- Fable`), so that two limits of one window stay apart. When the parenthesis only repeats the window, the name
+-- before it is the qualifier (`GrokChat (Weekly)` → `Weekly GrokChat`).
 local function label(windowLabel: string, limit: string): string
 	if windowLabel == "" then
 		return window(limit)
 	end
 	local shown = window(windowLabel)
-	local qualifier = string.match(limit, "%(%s*(.-)%s*%)%s*$")
+	local before, qualifier = string.match(limit, "^%s*(.-)%s*%(%s*(.-)%s*%)%s*$")
+	if qualifier and string.lower(qualifier) == string.lower(windowLabel) then
+		qualifier = before
+	end
 	if qualifier and qualifier ~= "" and string.lower(qualifier) ~= string.lower(windowLabel) then
 		return shown .. " " .. qualifier
 	end

@@ -274,4 +274,25 @@ t.test("a shown subagent line's time changes on its own, so the sidebar redraws 
 	}), 500)
 end)
 
+t.test("open lines show at most 20 subagents: the running and failed ones, then the newest done, then +N more", function()
+	-- With none running, omp's tray lists every finished subagent of the session; a canvas update holds at most 2000
+	-- nodes and 256 KiB.
+	local subs: { any } = { sub("Run", "running", 1, { since = 1 }), sub("Bad", "failed", 1, { since = 2 }) }
+	for i = 1, 150 do
+		local intent = "Read /Users/me/Personal/tern-agent-deck/lib/view_model.luau and report what the code does " .. i
+		table.insert(subs, sub("Done" .. i, "done", 1, { since = 10 + i, role = "task", model = "claude-opus-5-5", intent = intent }))
+	end
+	local shown = view("idle", subs, { focused = 7, now = 200 })
+	local rows = visible.agentRows(shown)
+	t.eq(#rows, 1 + 20 + 1)
+	t.eq(string.find(rows[2], "Run", 1, true) ~= nil, true)
+	t.eq(string.find(rows[3], "Bad", 1, true) ~= nil, true)
+	t.eq(string.find(rows[4], "Done133", 1, true) ~= nil, true)
+	t.eq(string.find(rows[21], "Done150", 1, true) ~= nil, true)
+	t.eq(rows[22], ":more +132 more")
+	local nodes, bytes = visible.size(shown)
+	t.eq(nodes < 2000, true)
+	t.eq(bytes < 256 * 1024, true)
+end)
+
 return nil

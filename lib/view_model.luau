@@ -17,8 +17,11 @@ export type Agent = {
 	state: AgentState,
 	--- The pane title as Tern gives it (omp starts it with an icon character and a space).
 	title: string?,
-	--- The tab the agent's pane sits in (nil when parked) and the name the user gave that tab.
+	--- The tab the agent's pane sits in (nil when parked) and the name the user gave that tab. `tab` is Tern's
+	--- internal tab id, for grouping only; `tabNumber` is the one-based place of that tab in Tern's tab bar, for
+	--- display.
 	tab: number?,
+	tabNumber: number?,
 	tabName: string?,
 	cwd: string?,
 	--- The model as Tern shows it; may end in a thinking-level glyph.
@@ -187,6 +190,8 @@ type Shared = {
 	subsOpen: { [number]: boolean },
 	--- What each live omp session cost, by session file.
 	cost: { [string]: Cost },
+	--- How many more subagent lines the view can draw (see `VIEW_SUB_LINES`); each agent's lines take from it.
+	subLines: number,
 }
 
 local function nonEmpty(text: string?): string?
@@ -720,7 +725,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 			state = shown.label,
 			seconds = shown.seconds,
 			turn = if agent.state == "working" then math.max(0, shared.now - (agent.workingSince or shared.now)) else nil,
-			tab = if agent.tab then string.format("tab %.0f", agent.tab) else nil,
+			tab = if agent.tabNumber then string.format("tab %.0f", agent.tabNumber) else nil,
 			name = rowTitle(agent, shared),
 			message = if message then messageNode(message, agent.summary, agent.summarizing) else nil,
 			facts = facts,
@@ -1168,10 +1173,52 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 	}
 end
 
+-- An agent draws at most this many subagent lines, and the whole view at most `VIEW_SUB_LINES`, in the order the
+-- agents show: with none running, omp's tray lists every finished subagent of the session, and a canvas update holds
+-- at most 2000 nodes and 256 KiB. A line with its hover card is about 10 nodes.
+local SUB_LINES = 20
+local VIEW_SUB_LINES = 100
+
+-- The subagents of `subs` that get a line, at most `limit`: first the one the pane shows, then the failed ones (a
+-- failure never hides), then the others not finished (running, waiting, queued), then the newest finished ones. Also
+-- how many get none.
+local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
+	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
+	for index, sub in subs.agents do
+		if sub.depth <= MAX_DEPTH then
+			local rank = if viewing.shows(sub, shown)
+				then 3
+				elseif sub.status == "failed" then 2
+				elseif sub.status ~= "done" and sub.status ~= "aborted" then 1
+				else 0
+			table.insert(candidates, { sub = sub, index = index, rank = rank })
+		end
+	end
+	if #candidates > limit then
+		table.sort(candidates, function(a, b)
+			if a.rank ~= b.rank then
+				return a.rank > b.rank
+			end
+			local sa, sb = a.sub.since or -math.huge, b.sub.since or -math.huge
+			if sa ~= sb then
+				return sa > sb
+			end
+			return a.index > b.index
+		end)
+	end
+	local drawn: { [subagents.Subagent]: boolean } = {}
+	for k = 1, math.min(limit, #candidates) do
+		drawn[candidates[k].sub] = true
+	end
+	return drawn, math.max(0, #candidates - limit)
+end
+
 -- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
 -- down per nesting level: every one while the lines are open (`agents.strip.open`), else only the failed ones (a
--- failure never hides). A warning line says when Tern cut the read, and one that +N running subagents sit past the
--- levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
+-- failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see
+-- `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
+-- subagents sit past the levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css`
+-- draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1189,6 +1236,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	-- While the lines are open, the subagent the focused pane's omp shows takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
+	local drawn, past = drawnSubs(subs, if open then shown else nil, math.min(SUB_LINES, shared.subLines))
 	for _, sub in subs.agents do
 		local selected = open and viewing.shows(sub, shown)
 		if selected then
@@ -1198,11 +1246,15 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			if sub.status == "running" then
 				deeper += 1
 			end
-		elseif open or sub.status == "failed" then
+		elseif (open or sub.status == "failed") and drawn[sub] then
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 			local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
 			table.insert(if open then lines else failed, line)
+			shared.subLines -= 1
 		end
+	end
+	if open and past > 0 then
+		table.insert(lines, infoLine("subs-more", iconNode("more", "muted"), string.format("+%d more", past), "muted", depth + 1))
 	end
 	if open then
 		if deeper > 0 then
@@ -1386,7 +1438,8 @@ function viewModel.redrawDue(input: Input): number?
 	end
 	if time then
 		-- A reset a day or more away shows its weekday; a nearer one counts down, and its line goes when it passes.
-		-- `time` counts whole seconds: on a boundary, the next text shows a second later.
+		-- `time` counts whole seconds, but a reset has a millisecond fraction: the delay rounds up to whole seconds so
+		-- the next redraw sees a later `time`. On a boundary, the next text shows a second later.
 		for _, hot in hotQuotas(input.quotas, time) do
 			local left = hot.left
 			local change
@@ -1396,7 +1449,7 @@ function viewModel.redrawDue(input: Input): number?
 				local unit = if left < MINUTE then 1 elseif left < HOUR then MINUTE else HOUR
 				change = left % unit
 			end
-			soon((if change > 0 then change else 1) * 1000)
+			soon(math.max(1, math.ceil(change)) * 1000)
 		end
 	end
 	return due
@@ -1608,8 +1661,8 @@ local function cardFooter(agent: Agent, role: string?): Node?
 	if project then
 		table.insert(parts, project)
 	end
-	if agent.tab then
-		table.insert(parts, string.format("tab %.0f", agent.tab))
+	if agent.tabNumber then
+		table.insert(parts, string.format("tab %.0f", agent.tabNumber))
 	end
 	if role then
 		table.insert(parts, role)
@@ -1733,6 +1786,7 @@ local function context(input: Input): Shared
 		routes = input.routes or {},
 		cost = input.cost or {},
 		subsOpen = input.subsOpen or {},
+		subLines = VIEW_SUB_LINES,
 	}
 	for _, agent in input.agents do
 		if agent.tab then
@@ -2053,21 +2107,14 @@ end
 
 -- The Recent view: the closed sessions by day (Today, Yesterday, This week), each day its count and its projects
 -- (see `recentProjects`), then "Earlier" folded with its count; each day hidden while empty. A calm line shows while
--- there is no closed session. A day shows at most its `RECENT_CAP` newest sessions, then one muted "N more" line
--- that takes no click: a canvas update holds at most 2000 nodes.
+-- there is no closed session. The whole view shows at most the `RECENT_CAP` newest sessions: a canvas update holds at
+-- most 2000 nodes and 256 KiB. The sessions past the cap go into one muted "N more" line that takes no click, on the
+-- last day that shows; a day with no place left does not show. An open Earlier with no place left shows only its
+-- own "N more" line.
 local RECENT_CAP = 50
 
-local function recentDay(key: string, sessions: { Session }, input: Input): { Node }
-	local shown = sessions
-	if #sessions > RECENT_CAP then
-		shown = table.move(sessions, 1, RECENT_CAP, 1, {})
-	end
-	local body = recentProjects(shown, input)
-	if #sessions > RECENT_CAP then
-		local text = string.format("%d more", #sessions - RECENT_CAP)
-		table.insert(body, infoLine(key .. "-more", iconNode("more", "muted"), text, "muted", 0))
-	end
-	return body
+local function moreLine(key: string, count: number): Node
+	return infoLine(key .. "-more", iconNode("more", "muted"), string.format("%d more", count), "muted", 0)
 end
 
 local function recentBody(input: Input): { Node }
@@ -2086,23 +2133,44 @@ local function recentBody(input: Input): { Node }
 		end
 	end
 	local children: { Node } = {}
+	local budget = RECENT_CAP
+	local hidden = 0
+	local lastBody: { Node }? = nil
+	local lastKey = ""
 	for i, day in days do
 		local sessions = byDay[i]
 		if #sessions > 0 then
 			local key = "day-" .. string.lower((string.gsub(day.name, " ", "-")))
 			if day.name ~= "Earlier" then
-				table.insert(children, zone(key, nil, day.name, tostring(#sessions), recentDay(key, sessions, input)))
+				local take = math.min(budget, #sessions)
+				hidden += #sessions - take
+				if take > 0 then
+					budget -= take
+					local body = recentProjects(table.move(sessions, 1, take, 1, {}), input)
+					lastBody, lastKey = body, key
+					table.insert(children, zone(key, nil, day.name, tostring(#sessions), body))
+				end
 			else
 				local open = input.earlierOpen == true
 				local body: { Node } = { foldRow("head", "Earlier", #sessions, open, "earlier", 0) }
 				if open then
-					for _, project in recentDay(key, sessions, input) do
-						table.insert(body, project)
+					local take = math.min(budget, #sessions)
+					budget -= take
+					if take > 0 then
+						for _, project in recentProjects(table.move(sessions, 1, take, 1, {}), input) do
+							table.insert(body, project)
+						end
+					end
+					if #sessions > take then
+						table.insert(body, moreLine(key, #sessions - take))
 					end
 				end
 				table.insert(children, { k = "col", p = { key = key, role = ROLE.zone, gap = "none" }, c = body })
 			end
 		end
+	end
+	if lastBody and hidden > 0 then
+		table.insert(lastBody, moreLine(lastKey, hidden))
 	end
 	if #children == 0 then
 		table.insert(children, { k = "text", p = { key = "calm", role = ROLE.calm, text = "No closed omp sessions yet" } })

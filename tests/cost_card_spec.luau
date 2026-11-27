@@ -14,7 +14,8 @@ local HINT = "Click: go to it · Right-click: Pin, Rename, Copy session ID or pa
 local function build(cost: { [string]: any }?, fields: { [string]: any }?): any
 	local agent: { [string]: any } = {
 		pane = 4,
-		tab = 3,
+		tab = 944892805168,
+		tabNumber = 3,
 		state = "idle",
 		cwd = "/Users/me/repo",
 		repo = "/Users/me/repo",

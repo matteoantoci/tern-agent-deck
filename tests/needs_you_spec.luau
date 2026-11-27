@@ -53,7 +53,8 @@ t.test("Needs you shows each waiting agent as a card: title icon, title, wait ti
 				title = "\u{F0E7} ask",
 				state = "waiting_input",
 				activeAt = NOW - 90,
-				tab = 2,
+				tab = 944892805170,
+				tabNumber = 2,
 				lastMessage = "Which branch should I rebase onto?",
 			}),
 		},
@@ -69,7 +70,7 @@ end)
 
 t.test("a pinned waiting agent is a card too, in no other zone", function()
 	local out = build({
-		agents = { agent({ pane = 3, title = "pinned ask", state = "waiting_input", activeAt = NOW - 30, tab = 1 }) },
+		agents = { agent({ pane = 3, title = "pinned ask", state = "waiting_input", activeAt = NOW - 30, tab = 944892805168, tabNumber = 1 }) },
 		pins = { { pane = 3, cwd = REPO, title = "pinned ask" } },
 	}).view
 	t.eq(visible.zones(out), { "■ Needs you 1" })
@@ -91,7 +92,7 @@ end)
 
 t.test("a subagent that asks the user is a card named after itself in its agent, with its type in the footer", function()
 	local out = build({
-		agents = { agent({ pane = 7, title = "Lead", state = "working", workingSince = 0, tab = 3 }) },
+		agents = { agent({ pane = 7, title = "Lead", state = "working", workingSince = 0, tab = 944892805171, tabNumber = 3 }) },
 		subagents = {
 			[7] = {
 				agents = {
