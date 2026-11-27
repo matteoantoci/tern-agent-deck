@@ -44,76 +44,87 @@
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
-/* The title row, as a Tern panel's (measured there at about 42px): the agent icon 8px in, in line with the rows'
-   icons, "Agents" 8px after it, and the hide button at the right end, its icon 8px from the edge too. */
+/* The title row, with the values of Tern's Files panel head (`.ft-head`, `.ft-gl`, `.ft-name`, `.ft-hb`): 40px tall,
+   a 14px icon in the muted ink, the name at 13px weight 550, 7px between them, and a 26px hide button. The icon
+   stays 8px in, in line with the rows' icons. */
 [data-role='agents.root'] [data-role='agents.top'] {
-	height: 44px;
+	height: 40px;
 	min-width: 0;
-	padding: 0 4px 0 8px;
+	padding: 0 6px 0 8px;
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
 [data-role='agents.top'] > [data-role='agents.icon'] {
-	margin-right: 8px;
+	margin-right: 7px;
 	color: var(--t3);
 }
 
 [data-role='agents.top'] > [data-role='agents.icon'] svg {
-	width: 18px;
-	height: 18px;
+	width: 14px;
+	height: 14px;
 }
 
-/* The panel name, as bold and bright as a Tern panel's. */
 [data-role='agents.root'] [data-role='agents.heading'] {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	font-size: 14px;
+	font-size: 13px;
 	font-weight: 600;
 	color: var(--t1);
 }
 
-/* The chips: 32 by 24px, with no gap and none of their own padding, so that the Live icon sits 8px in, in line with
-   the agent icon above it. The strip is 32px tall and ends on its own hairline. */
+/* The chip strip, with the values of Tern's Files panel tabs (`.ft-tabs`, `.ft-t`): 30px tall, 28 by 22px chips 2px
+   apart, a 14px icon in the muted ink. */
 [data-role='agents.root'] [data-role='agents.views'] {
-	height: 32px;
-	gap: 0;
-	padding: 0;
+	height: 30px;
+	gap: 2px;
+	padding: 0 2px;
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
-/* The hide button and the chips are icon squares in the secondary ink, brighter on hover over Tern's own hover fill. */
+/* The hide button and the chips are icon squares in the muted ink, brighter over the hover fill. Tern's buttons
+   shrink while pressed and spring back past their size; Tern's own panel chips do not, so neither do these. */
 [data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.view'], [data-role='agents.view.on']) {
 	flex: none;
 	display: grid;
 	place-items: center;
-	width: 24px;
-	min-width: 24px;
-	height: 24px;
+	width: 26px;
+	min-width: 26px;
+	height: 26px;
 	padding: 0;
 	line-height: 1;
 	border-radius: var(--r-chip);
-	color: var(--t2);
-	transition: color 0.15s var(--ease);
+	color: var(--t3);
+	transition:
+		background 0.15s var(--ease),
+		color 0.15s var(--ease);
+}
+
+[data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.view'], [data-role='agents.view.on']):active {
+	transform: none;
 }
 
 [data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) {
-	width: 32px;
-	min-width: 32px;
+	width: 28px;
+	min-width: 28px;
+	height: 22px;
 }
 
-[data-role='agents.root'] [data-role='agents.hide'] svg {
-	width: 18px;
-	height: 18px;
+/* Tern's small buttons draw a 12px icon (`.sf-button[data-size='sm'] .sf-btn-ic .ico`); these take the Files
+   panel's sizes, so the selectors repeat `[data-size]` to win over it. */
+[data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on'])[data-size] :is(.sf-btn-ic, .sf-btn-ic .ico) {
+	width: 14px;
+	height: 14px;
 }
 
-[data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) svg {
+[data-role='agents.root'] [data-role='agents.hide'][data-size] :is(.sf-btn-ic, .sf-btn-ic .ico) {
 	width: 16px;
 	height: 16px;
 }
 
 [data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.view']):hover {
 	color: var(--t1);
+	background: var(--l1);
 }
 
 /* The shown chip: Tern's filled chip, the same fill while hovered or pressed. */
@@ -121,6 +132,14 @@
 [data-role='agents.root'] [data-role='agents.view.on']:is(:hover, :active) {
 	color: var(--t1);
 	background: var(--l2);
+}
+
+/* The keyboard focus ring of Tern's panel chips. */
+[data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.view'], [data-role='agents.view.on']):focus-visible {
+	outline: none;
+	box-shadow:
+		0 0 0 1px var(--accent),
+		0 0 0 4px rgb(from var(--accent) r g b / 18%);
 }
 
 /* The waiting mark 4px after the Live chip, the number of Needs you cards 4px after the mark, and 8px after the
