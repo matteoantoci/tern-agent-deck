@@ -87,7 +87,7 @@ t.test("an open folder lists its sessions newest first, with the title, or Untit
 		session(4, "", 30),
 	})), {
 		HEAD(4),
-		"○(Closed) Untitled now",
+		"○(Closed) Untitled 30s",
 		"○(Closed) Untitled 5m",
 		"○(Closed) " .. ICON .. "Fix login 2h",
 		"○(Closed) " .. ICON .. "Plan the sidebar 3d",
@@ -164,16 +164,14 @@ t.test("a pinned agent's folder lists its closed sessions too", function()
 	})), { HEAD(1), "○(Closed) Plan 1h" })
 end)
 
-t.test("the Live view lists no closed session, and a folded folder there shows only its row", function()
+t.test("the Live view lists no closed session", function()
 	local agents = { agent({ pane = 1 }), agent({ pane = 2, title = "old", activeAt = NOW - 2 * DAY }) }
 	local sessions = { session(1, "Plan", HOUR) }
 	t.eq(visible.rows(view(agents, sessions, { view = "live" })), {
-		":chev :mi-folder-open tern-agents 2 [:plus](New tab in this repo)",
-		"●(Idle) " .. ICON .. "Live chat",
-		":chev-r Older 1",
-	})
-	t.eq(visible.rows(view(agents, sessions, { view = "live", folded = { [KEY] = true } })), {
-		":chev-r :mi-folder tern-agents 2 [:plus](New tab in this repo)",
+		"■ Idle 2",
+		"tern-agents [:plus](New tab in this repo)",
+		"\u{F0403}(Idle) Live chat",
+		":chev-r Older than a day 1",
 	})
 end)
 

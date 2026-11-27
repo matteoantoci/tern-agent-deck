@@ -1,9 +1,9 @@
 --!strict
--- The plugin's shared state in `tern.kv`: the pins, the view the strip shows (Live or Recent), the open "Older" rows,
--- the folded sections, the folders open in the Recent view, whether the Recent view shows every folder, when each
--- agent was last in a turn and when each working agent began its turn. `tern.kv` is one file for every window and
--- survives restarts and plugin reloads, so every tab and window shows the same view, pins, rows and timers, and they
--- stay after a reload or a Tern restart.
+-- The plugin's shared state in `tern.kv`: the pins, the view the strip shows (Live or Recent), whether "Older than a
+-- day" is open, the folders open in the Recent view, whether the Recent view shows every folder, when each agent was
+-- last in a turn and when each working agent began its turn. `tern.kv` is one file for every window and survives
+-- restarts and plugin reloads, so every tab and window shows the same view, pins, rows and timers, and they stay
+-- after a reload or a Tern restart.
 
 local sessionReader = require("./session_reader")
 local turns = require("./turns")
@@ -15,9 +15,13 @@ local PINS = "pins"
 local ACTIVITY = "activity"
 -- When each working agent began its turn (`lib/turns.luau`).
 local TURNS = "turns"
--- The sets of group keys, by what they record: the open "Older" rows, the sections folded in the Live view, and the
--- folders whose sessions show in the Recent view.
-export type KeySet = "older" | "folded" | "recent"
+-- The set of folder keys whose sessions show in the Recent view.
+export type KeySet = "recent"
+-- `true` while the Idle zone shows its agents that idled for a day or more.
+local OLDER_OPEN = "older-open"
+-- Keys that earlier versions kept and no version reads: the folded sections and the open "Older" rows of each
+-- folder (the Live view had folders then).
+local OLD_KEYS = { "folded", "older" }
 -- `true` while the Recent view shows every folder, rather than only the first few.
 local RECENT_ALL = "recent-all"
 -- The view the strip shows: `"recent"`, or nothing for Live.
@@ -125,13 +129,29 @@ local function setTurns(starts: turns.Starts)
 	end
 end
 
+-- Whether this VM removed the old keys from `tern.kv`.
+local cleaned = false
+
+local function cleanOldKeys()
+	if cleaned then
+		return
+	end
+	cleaned = true
+	for _, key in OLD_KEYS do
+		if get(key) ~= nil then
+			tern.kv.set(key, nil)
+		end
+	end
+end
+
 --- Completes the view-model input with the shared state: the wall-clock time, when each working agent began its
---- turn, when each agent was last in a turn, the pins, the view the strip shows, the open Older rows, the folded
---- sections, the folders open in the Recent view and whether it shows every folder. Records the agents it sees for
---- the first time as active now (an agent never seen in a turn counts as new), a working agent with no turn start as
---- working since now, and stores the pins with the pane ids and titles their agents have now. Drops the turn starts
---- of agents that do not work or are gone.
+--- turn, when each agent was last in a turn, the pins, the view the strip shows, whether "Older than a day" is open,
+--- the folders open in the Recent view and whether it shows every folder. Records the agents it sees for the first
+--- time as active now (an agent never seen in a turn counts as new), a working agent with no turn start as working
+--- since now, and stores the pins with the pane ids and titles their agents have now. Drops the turn starts of agents
+--- that do not work or are gone, and the keys no version reads.
 function store.fill(input: viewModel.Input): viewModel.Input
+	cleanOldKeys()
 	local time = os.time()
 	input.time = time
 
@@ -182,8 +202,7 @@ function store.fill(input: viewModel.Input): viewModel.Input
 		setPins(resolved)
 	end
 	input.pins = resolved
-	input.olderOpen = keySet("older")
-	input.folded = keySet("folded")
+	input.olderOpen = get(OLDER_OPEN) == true
 	input.recentOpen = keySet("recent")
 	input.recentAll = recentAll()
 	input.view = if get(VIEW) == "recent" then "recent" else "live"
@@ -233,7 +252,7 @@ function store.forget(index: number)
 	end
 end
 
---- Removes the pin of the agent in `pane`, found the way the Pinned section finds it.
+--- Removes the pin of the agent in `pane`, found the way the Live view finds it.
 function store.unpin(cx: WindowCx, pane: number)
 	local index = viewModel.pinOf(agents(cx), pins(), pane)
 	if index then
@@ -241,8 +260,8 @@ function store.unpin(cx: WindowCx, pane: number)
 	end
 end
 
---- Pins the agent in `pane` with its working directory, pane title and session file as backup keys, at the bottom
---- of Pinned. Returns false when `pane` runs no agent.
+--- Pins the agent in `pane` with its working directory, pane title and session file as backup keys, after the other
+--- pins. Returns false when `pane` runs no agent.
 function store.pin(cx: WindowCx, pane: number): boolean
 	local listed = agents(cx)
 	local agent: viewModel.Agent? = nil
@@ -264,14 +283,18 @@ function store.pin(cx: WindowCx, pane: number): boolean
 	return true
 end
 
---- Whether a pin names the agent in `pane`, the way the Pinned section matches pins to agents: a pin whose agent
+--- Whether a pin names the agent in `pane`, the way the Live view matches pins to agents: a pin whose agent
 --- is gone does not name another agent that got its pane id.
 function store.pinned(cx: WindowCx, pane: number): boolean
 	return viewModel.pinOf(agents(cx), pins(), pane) ~= nil
 end
 
---- Adds `key` to the set `name` (an Older or Recent row opens, a section folds) when it is not in it, and removes it
---- when it is.
+--- Opens "Older than a day" when it is closed, and closes it when it is open.
+function store.toggleOlder()
+	tern.kv.set(OLDER_OPEN, if get(OLDER_OPEN) == true then nil else true)
+end
+
+--- Adds `key` to the set `name` (a Recent folder opens) when it is not in it, and removes it when it is.
 function store.toggle(name: KeySet, key: string)
 	local set = keySet(name)
 	if set[key] then

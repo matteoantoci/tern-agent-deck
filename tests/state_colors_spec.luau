@@ -1,6 +1,6 @@
 --!strict
--- Each state reaches the canvas as data (the state in the role of its dot or icon), and `agents.css` gives it its
--- color. No state takes a Tern tone, so the accent marks only the selected row.
+-- Each state reaches the canvas as data (the state in the role of its title icon, square, dot or icon), and
+-- `agents.css` gives it its color. No state takes a Tern tone, so the accent marks only this tab's agent.
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
@@ -17,33 +17,28 @@ local function sub(name: string, status: string, extra: { [string]: any }?): { [
 	return s
 end
 
-t.test("each agent state puts its own state on the dot", function()
+t.test("each agent state puts its own state on the title icon, and each zone its state on its square", function()
 	local out = viewModel.build({
 		agents = { agent(1, "working", "a"), agent(2, "waiting_input", "b"), agent(3, "idle", "c") },
 		now = 0,
 	}).view
 	t.eq(visible.states(out), {
-		"waiting: :bell Needs you 1",
-		"waiting: ●(Waiting for you) b repo :bell",
-		"working: ●(Working) a",
-		"waiting: ●(Waiting for you) b :bell",
-		"idle: ●(Idle) c",
+		"waiting: ■ Needs you 1",
+		"waiting: :sparkle(Waiting for you) b",
+		"working: ■ Working 1 busy",
+		"working: :sparkle(Working) a 0s",
+		"idle: ■ Idle 1",
+		"idle: :sparkle(Idle) c",
 	})
 end)
 
-t.test("an exited pinned agent puts the exited state on its dot", function()
+t.test("a stopped pinned agent puts the stopped state on its title icon", function()
 	local out = viewModel.build({
 		agents = {},
 		pins = { { pane = 9, title = "Done", cwd = "/repo" } },
 		now = 0,
 	}).view
-	local exited = false
-	for _, shown in visible.states(out) do
-		if string.find(shown, "^exited: ○%(Exited%)") then
-			exited = true
-		end
-	end
-	t.eq(exited, true)
+	t.eq(visible.state(out, ") Done"), "stopped")
 end)
 
 t.test("each subagent state puts its own state on its dot or on the finished line's icon", function()
@@ -56,7 +51,8 @@ t.test("each subagent state puts its own state on its dot or on the finished lin
 	end
 	local live = view({ sub("A", "running"), sub("B", "running", { waiting = true }) })
 	t.eq(visible.states(live), {
-		"working: ●(Working) Lead",
+		"working: ■ Working 1 busy",
+		"working: :sparkle(Working) Lead 0s",
 		"running: ●(Running) A",
 		"waiting: ●(Waiting on its subagents) B",
 	})
@@ -65,7 +61,7 @@ t.test("each subagent state puts its own state on its dot or on the finished lin
 	t.eq(visible.state(view({ sub("A", "done"), sub("B", "aborted") }), "1 subagent done, 1 stopped"), "stopped")
 end)
 
-t.test("no state dot, state icon or end mark takes a Tern tone or span style, so no state uses the accent", function()
+t.test("no title icon, square, state dot or state icon takes a Tern tone or span style, so no state uses the accent", function()
 	local out = viewModel.build({
 		agents = { agent(1, "working", "a"), agent(2, "waiting_input", "b"), agent(3, "idle", "c"), agent(7, "working", "Lead") },
 		pins = { { pane = 9, title = "d", cwd = "/repo" } },

@@ -29,7 +29,7 @@ t.test("a subagent row shows the dot, the name and its role, with no model chip,
 		sub("Ticket07", "running", 1, { intent = "Running probe", model = "GPT-5.1", role = "scout" }),
 		sub("Bare", "running", 1),
 	})), {
-		"●(Working) Lead",
+		":sparkle(Working) Lead 0s",
 		"●(Running) Ticket03 task",
 		"●(Running) Ticket07 scout",
 		"●(Running) Bare",
@@ -101,7 +101,7 @@ t.test("nested subagents show in the same flat list, each naming the subagent it
 		sub("Other", "running", 1),
 	})
 	t.eq(visible.agentRows(out), {
-		"●(Working) Lead",
+		":sparkle(Working) Lead 0s",
 		"●(Running) Merge0407 task",
 		"●(Running) Ticket04 task · in Merge0407",
 		"●(Running) Probe in Ticket04",
@@ -136,12 +136,12 @@ t.test("finished subagents at every level fold into one line that counts each re
 		sub("E", "pending"),
 		sub("F", "done", 3),
 	})), {
-		"●(Working) Lead",
+		":sparkle(Working) Lead 0s",
 		"●(Running) B",
 		":x 2 subagents done, 1 failed, 1 stopped",
 	})
-	t.eq(visible.agentRows(view("working", { sub("A", "done") })), { "●(Working) Lead", ":check 1 subagent done" })
-	t.eq(visible.agentRows(view("working", { sub("A", "failed") })), { "●(Working) Lead", ":x 1 subagent failed" })
+	t.eq(visible.agentRows(view("working", { sub("A", "done") })), { ":sparkle(Working) Lead 0s", ":check 1 subagent done" })
+	t.eq(visible.agentRows(view("working", { sub("A", "failed") })), { ":sparkle(Working) Lead 0s", ":x 1 subagent failed" })
 end)
 
 t.test("the finished line takes its state from the worst result: done when all succeed, failed on a failure, stopped on a stop", function()
@@ -150,17 +150,17 @@ t.test("the finished line takes its state from the worst result: done when all s
 	local oneFailed = view("working", { sub("A", "done"), sub("B", "failed"), sub("C", "aborted") })
 	t.eq(visible.state(oneFailed, "1 subagent done, 1 failed, 1 stopped"), "failed")
 	local oneStopped = view("working", { sub("A", "done"), sub("B", "aborted") })
-	t.eq(visible.agentRows(oneStopped), { "●(Working) Lead", ":check 1 subagent done, 1 stopped" })
+	t.eq(visible.agentRows(oneStopped), { ":sparkle(Working) Lead 0s", ":check 1 subagent done, 1 stopped" })
 	t.eq(visible.state(oneStopped, "1 subagent done, 1 stopped"), "stopped")
 end)
 
 t.test("when the agent becomes idle with every subagent finished, its done line disappears", function()
-	t.eq(visible.agentRows(view("idle", { sub("A", "done"), sub("B", "failed") }, true)), { "●(Idle) Lead" })
+	t.eq(visible.agentRows(view("idle", { sub("A", "done"), sub("B", "failed") }, true)), { ":sparkle(Idle) Lead" })
 end)
 
 t.test("an idle agent whose background subagents still run keeps their rows under its idle row", function()
 	t.eq(visible.agentRows(view("idle", { sub("A", "done"), sub("B", "running") })), {
-		"●(Idle) Lead",
+		":sparkle(Idle) Lead",
 		"●(Running) B",
 		":check 1 subagent done",
 	})
@@ -168,20 +168,20 @@ end)
 
 t.test("a read that Tern cut shows that the subagents may be incomplete", function()
 	t.eq(visible.agentRows(view("working", { sub("B", "running") }, true)), {
-		"●(Working) Lead",
+		":sparkle(Working) Lead 0s",
 		"●(Running) B",
 		":warn subagents may be incomplete",
 	})
-	t.eq(visible.agentRows(view("working", {}, true)), { "●(Working) Lead", ":warn subagents may be incomplete" })
+	t.eq(visible.agentRows(view("working", {}, true)), { ":sparkle(Working) Lead 0s", ":warn subagents may be incomplete" })
 end)
 
 t.test("an agent with no subagent data (Claude Code, Codex, omp without a task call) shows only its row", function()
 	t.eq(visible.agentRows(viewModel.build({ agents = { lead("working") }, now = 0, subagents = {} }).view), {
-		"●(Working) Lead",
+		":sparkle(Working) Lead 0s",
 	})
 end)
 
-t.test("a working agent in a repo group shows its subagent rows inside that group, under its row", function()
+t.test("a working agent in a project shows its subagent rows inside that project, under its row", function()
 	local out = viewModel.build({
 		agents = {
 			{ pane = 3, state = "idle", title = "Notes", cwd = "/tmp" },
@@ -193,14 +193,16 @@ t.test("a working agent in a repo group shows its subagent rows inside that grou
 		subagents = { [7] = { agents = { sub("Ticket07", "running", 1), sub("A", "done") }, incomplete = false } },
 	}).view
 	t.eq(visible.rows(out), {
-		":chev :mi-folder-open alpha 1 [:plus](New tab in this repo)",
-		"●(Working) Lead",
+		"■ Working 1 busy",
+		"alpha [:plus](New tab in this repo)",
+		":sparkle(Working) Lead 0s",
 		"●(Running) Ticket07",
 		":check 1 subagent done",
-		":chev :mi-folder-open beta 1 [:plus](New tab in this repo)",
-		"●(Idle) Docs",
-		":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)",
-		"●(Idle) Notes",
+		"■ Idle 2",
+		"beta [:plus](New tab in this repo)",
+		":sparkle(Idle) Docs",
+		"tmp [:plus](New tab in this folder)",
+		":sparkle(Idle) Notes",
 	})
 	t.eq(visible.click(out, "Ticket07"), "subagent=7 Ticket07")
 end)
