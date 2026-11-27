@@ -9,7 +9,7 @@ All your coding agents in one sidebar, in every Tern tab.
 ## ✨ Features
 
 - 🚦 **Zones.** The Live view shows three zones in a fixed order: **Needs you**, **Working** and **Idle**. A zone with no agents does not show.
-- 📁 **Agents by project.** Inside each zone, agents show under a light project label: the git repo, or the folder outside a repo. Worktrees and ovnfs checkouts go under their main repo.
+- 📁 **Agents by project.** Inside each zone, agents show under a light project label: the git repo, or the folder outside a repo. Worktrees and ovnfs checkouts go under their main repo. Inside a project, pinned agents come first in the order you pinned them, then the other agents in the order they started. Turn times and focus never move a row: a row moves only when its agent goes to another zone.
 - 🔔 **Needs you.** Each waiting agent is a card with its question (2 lines), its wait time and its project and tab, longest wait first. A waiting subagent gets its own card. The Live button shows how many agents need you. A status line segment counts the agents that work and wait, and a toast tells you when an agent off screen waits or finishes.
 - ➖ **Quiet rows.** Each agent is one line: omp's title icon in the color of its state, the title, a strip with one bar per running subagent, and one time (turn timer, wait time or age).
 - 🌳 **Subagents at every depth.** Click an agent's strip to show its subagent lines: one line for each running, waiting, queued or failed subagent, with its state, its name, what it does now and its time. Click a line to open that subagent in omp. A failed subagent always shows. A finished subagent gets no line: the hover card counts it.
@@ -49,13 +49,13 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | The subagent strip after an agent's title (its bars, or **N subagents** while none runs but some wait or are queued) | Shows or hides that agent's subagent lines. This tab's agent starts with them shown. When every subagent finished, the strip does not show. |
 | A subagent line | Opens that subagent in omp's view. |
 | `+` on a project label | Opens a new tab in that project. |
-| **Older than a day** | Shows or hides the idle agents whose last turn ended more than 1 day ago. Pins and this tab's agent always show. |
+| **Older than a day** | Shows or hides the idle agents whose last turn ended more than 1 day ago. Pins always show. When this tab's agent is under the closed line, the line carries the accent. |
 | A session row (Recent) | Resumes the session in a new tab with `omp --resume`. |
 | **Earlier** (Recent) | Shows or hides the sessions from before this week. |
 | The status line segment | Focuses the agent that has waited longest. |
 | The Live and Recent buttons | Switch the view. |
 
-The accent color marks only this tab's agent (with its open subagent lines) and keyboard focus.
+The accent color marks only this tab's agent (with its open subagent lines, or the closed **Older than a day** line that holds it) and keyboard focus.
 
 ### Hover card
 

@@ -178,9 +178,9 @@ end)
 t.test("while another agent is focused, the done subagent omp shows keeps its line but not the selection", function()
 	local out = showing({ sub("Ticket07", 1, { status = "done" }) }, "Ticket07", 9)
 	t.eq(visible.agentRows(out), {
-		":terminal(Working) Other 0s",
 		":terminal(Working) Lead 0s",
 		"■(Done) Ticket07 task",
+		":terminal(Working) Other 0s",
 	})
 	t.eq(visible.selected(out), { ":terminal(Working) Other 0s" })
 end)
@@ -219,9 +219,9 @@ t.test("while another agent is focused, its row stays the selected one and the s
 	local out = after(nil, dock({ "Ticket07" }), 9)
 	t.eq(visible.selected(out), { ":terminal(Working) Other 0s" })
 	t.eq(visible.agentRows(out), {
-		":terminal(Working) Other 0s",
 		":terminal(Working) Lead [▮ ▮ ▮] 0s",
 		"■(Running) Ticket07 task",
+		":terminal(Working) Other 0s",
 	})
 end)
 

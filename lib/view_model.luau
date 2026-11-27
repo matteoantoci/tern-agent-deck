@@ -123,8 +123,8 @@ export type Input = {
 	earlierOpen: boolean?,
 	--- The view the strip shows chosen; Live when nil.
 	view: View?,
-	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent, and its
-	--- project comes first in every zone.
+	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent (the
+	--- closed "Older than a day" line, while it sits under it), and its project comes first in every zone.
 	focused: number?,
 	--- The omp id of the subagent each pane's omp shows in its view ("Viewing <name>"), by pane: while the focused
 	--- pane shows one, that subagent's row is drawn selected instead of its agent's.
@@ -1325,8 +1325,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	return { k = "col", p = p, c = lines }
 end
 
--- An idle agent whose last turn ended this long ago (in seconds) folds into "Older than a day", unless it is pinned
--- or this tab's agent.
+-- An idle agent whose last turn ended this long ago (in seconds) folds into "Older than a day", unless it is pinned.
 local OLDER_AFTER = DAY
 
 local function isOlder(agent: Agent, time: number?): boolean
@@ -1544,8 +1543,7 @@ function viewModel.redrawDue(input: Input): number?
 			soon(untilChange(math.max(0, input.now - (agent.workingSince or input.now))))
 		elseif time and activeAt and (agent.state ~= "exited" or pinned[agent.pane]) then
 			soon(untilChange(math.max(0, time - activeAt) * 1000))
-			local exempt = pinned[agent.pane] or agent.pane == input.focused
-			if agent.state == "idle" and not exempt and not isOlder(agent, time) then
+			if agent.state == "idle" and not pinned[agent.pane] and not isOlder(agent, time) then
 				soon((activeAt + OLDER_AFTER - time) * 1000)
 			end
 		end
@@ -2071,11 +2069,10 @@ end
 
 -- The Live view: the zones Needs you (`cards`, the one that has waited longest first), Working and Idle,
 -- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, in one project
--- order for every zone: this tab's project first, then by name. Inside a project, this tab's agent comes first, then
--- the pinned agents in pin order, then the others: in Working, the longest turn first; in Idle, the newest turn
--- first and the stopped pins last. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended
--- a day ago or more, but for the pinned ones and this tab's, fold under "Older than a day". A calm line shows while
--- no zone does.
+-- order for every zone: this tab's project first, then by name. Inside a project, the pinned agents come first in pin
+-- order, then the others in start order, and in Idle the stopped pins last; turn times, states and the focus never
+-- move a row. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended a day ago or more,
+-- but for the pinned ones, fold under "Older than a day". A calm line shows while no zone does.
 local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { Node }
 	local subs = input.subagents or {}
 	local pins: { Pin } = input.pins or {}
@@ -2098,8 +2095,7 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 			table.insert(working, agent)
 			table.insert(shown, agent)
 		elseif agent.state == "idle" then
-			local exempt = pinned[agent.pane] or agent.pane == shared.focused
-			table.insert(if not exempt and isOlder(agent, input.time) then older else idle, agent)
+			table.insert(if not pinned[agent.pane] and isOlder(agent, input.time) then older else idle, agent)
 			table.insert(shown, agent)
 		end
 	end
@@ -2138,41 +2134,15 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 		end
 	end
 
-	-- This tab's agent first, then the pins in pin order, then the others.
-	local function rank(a: Agent, b: Agent): boolean?
-		local ma, mb = a.pane == shared.focused and a.state ~= "exited", b.pane == shared.focused and b.state ~= "exited"
-		if ma ~= mb then
-			return ma
-		end
-		local pa, pb = pinIndex[a] or math.huge, pinIndex[b] or math.huge
-		if pa ~= pb then
-			return pa < pb
-		end
-		return nil
-	end
-	local function longestTurn(a: Agent, b: Agent): boolean
-		local ranked = rank(a, b)
-		if ranked ~= nil then
-			return ranked
-		end
-		local sa, sb = a.workingSince or shared.now, b.workingSince or shared.now
-		if sa ~= sb then
-			return sa < sb
-		end
-		return a.pane < b.pane
-	end
-	local function newestTurn(a: Agent, b: Agent): boolean
+	-- The stopped pins last, then the pins in pin order, then the others in start order.
+	local function before(a: Agent, b: Agent): boolean
 		local xa, xb = a.state == "exited", b.state == "exited"
 		if xa ~= xb then
 			return xb
 		end
-		local ranked = rank(a, b)
-		if ranked ~= nil then
-			return ranked
-		end
-		local ta, tb = a.activeAt or math.huge, b.activeAt or math.huge
-		if ta ~= tb then
-			return ta > tb
+		local pa, pb = pinIndex[a] or math.huge, pinIndex[b] or math.huge
+		if pa ~= pb then
+			return pa < pb
 		end
 		return a.pane < b.pane
 	end
@@ -2205,16 +2175,26 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 		table.insert(children, zone("zone-needs", "waiting", "Needs you", tostring(#cards), nodes))
 	end
 	if #working > 0 then
-		local body = projectGroups(order, working, longestTurn, render, input.home)
+		local body = projectGroups(order, working, before, render, input.home)
 		table.insert(children, zone("zone-working", "working", "Working", #working .. " busy", body))
 	end
 	if #idle + #older > 0 then
-		local body = projectGroups(order, idle, newestTurn, render, input.home)
+		local body = projectGroups(order, idle, before, render, input.home)
 		if #older > 0 then
 			local open = input.olderOpen == true
-			table.insert(body, foldRow("older", "Older than a day", #older, open, "older", 0))
+			local fold = foldRow("older", "Older than a day", #older, open, "older", 0)
+			-- A closed fold that holds this tab's agent carries the accent in its place, so that a selection always
+			-- shows.
+			local holdsMine = false
+			for _, agent in older do
+				holdsMine = holdsMine or agent.pane == shared.focused
+			end
+			if holdsMine and not open then
+				fold = { k = "col", p = { key = "older-mine", role = ROLE.mine, gap = "none" }, c = { fold } }
+			end
+			table.insert(body, fold)
 			if open then
-				local groups = projectGroups(order, older, newestTurn, render, input.home)
+				local groups = projectGroups(order, older, before, render, input.home)
 				table.insert(body, { k = "col", p = { key = "older-list", role = ROLE.older, gap = "none" }, c = groups })
 			end
 		end

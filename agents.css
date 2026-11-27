@@ -253,7 +253,8 @@
 	color: var(--t1);
 }
 
-/* This tab's agent: a light accent fill with a 2px accent bar at the left, around the agent and its subagent lines. */
+/* This tab's agent: a light accent fill with a 2px accent bar at the left, around the agent and its subagent lines,
+   or around the closed Older than a day line while the agent sits under it. */
 [data-role='agents.root'] :is([data-role='agents.on.0'], [data-role='agents.mine']) {
 	border-radius: var(--r-chip);
 	background: rgb(from var(--accent) r g b / 10%);
