@@ -97,7 +97,7 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   each session file, the quotas and the time); out: the canvas node tree, the status line segments, the waiting
   agents in wait order, the toast text and `redrawDue` (the milliseconds until a shown time or a quota's reset text
   changes). The Live tree is the zones Needs you (cards, longest wait first), Working and Idle (agents under project
-  labels, the pins first in pin order, then the others in start order, so that times and the focus move no row; idle
+  labels by name, the pins first in pin order, then the others in start order, so that times and the focus move no row;
   agents older than a day folded, but for the pins); the Recent tree is days (Today, Yesterday, This week, Earlier) with
   project labels. Each row carries its hover card (state, tab, title, summary, facts, cost lines, subagent counts,
   hint) and its right-click menu. It also names each tab after its main agent. It uses no `tern` global, so the plain

@@ -93,7 +93,7 @@ t.test("a worktree groups under its main repo", function()
 	}), "Idle"), { DECK_LABEL, ICON .. "(Idle) main", ICON .. "(Idle) tree" })
 end)
 
-t.test("every zone uses one project order: this tab's project first, then by name", function()
+t.test("every zone orders its projects by name, whatever the focus", function()
 	local agents = {
 		agent({ pane = 1, state = "working", title = ICON .. " deck busy" }),
 		agent({ pane = 2, state = "working", title = ICON .. " pi busy", cwd = PI, repo = PI }),
@@ -101,22 +101,20 @@ t.test("every zone uses one project order: this tab's project first, then by nam
 		agent({ pane = 4, title = ICON .. " pi idle", cwd = PI, repo = PI }),
 		agent({ pane = 5, title = ICON .. " zeta idle", cwd = "/Users/me/zeta", repo = "/Users/me/zeta" }),
 	}
-	local byName = view(agents)
-	t.eq(visible.zone(byName, "Working"), { PI_LABEL, ICON .. "(Working) pi busy 0s", DECK_LABEL, ICON .. "(Working) deck busy 0s" })
-	t.eq(visible.zone(byName, "Idle")[1], PI_LABEL)
-	local mine = view(agents, { focused = 5 })
-	t.eq(visible.zone(mine, "Working"), { PI_LABEL, ICON .. "(Working) pi busy 0s", DECK_LABEL, ICON .. "(Working) deck busy 0s" })
-	t.eq(visible.zone(mine, "Idle"), {
-		"zeta [:plus](New tab in this repo)",
-		ICON .. "(Idle) zeta idle",
+	local working = { PI_LABEL, ICON .. "(Working) pi busy 0s", DECK_LABEL, ICON .. "(Working) deck busy 0s" }
+	local idle = {
 		PI_LABEL,
 		ICON .. "(Idle) pi idle",
 		DECK_LABEL,
 		ICON .. "(Idle) deck idle",
-	})
-	local deck = view(agents, { focused = 3 })
-	t.eq(visible.zone(deck, "Working")[1], DECK_LABEL)
-	t.eq(visible.zone(deck, "Idle")[1], DECK_LABEL)
+		"zeta [:plus](New tab in this repo)",
+		ICON .. "(Idle) zeta idle",
+	}
+	for _, extra in { {}, { focused = 1 }, { focused = 3 }, { focused = 5 } } do
+		local out = view(agents, extra)
+		t.eq(visible.zone(out, "Working"), working)
+		t.eq(visible.zone(out, "Idle"), idle)
+	end
 end)
 
 t.test("a project label's + asks for a new tab in that project, and its hover card gives the short path", function()

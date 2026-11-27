@@ -124,7 +124,7 @@ export type Input = {
 	--- The view the strip shows chosen; Live when nil.
 	view: View?,
 	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent (the
-	--- closed "Older than a day" line, while it sits under it), and its project comes first in every zone.
+	--- closed "Older than a day" line, while it sits under it); it moves no row.
 	focused: number?,
 	--- The omp id of the subagent each pane's omp shows in its view ("Viewing <name>"), by pane: while the focused
 	--- pane shows one, that subagent's row is drawn selected instead of its agent's.
@@ -2068,8 +2068,8 @@ local function projectGroups(
 end
 
 -- The Live view: the zones Needs you (`cards`, the one that has waited longest first), Working and Idle,
--- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, in one project
--- order for every zone: this tab's project first, then by name. Inside a project, the pinned agents come first in pin
+-- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, the projects by name
+-- in every zone (see `groups`). Inside a project, the pinned agents come first in pin
 -- order, then the others in start order, and in Idle the stopped pins last; turn times, states and the focus never
 -- move a row. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended a day ago or more,
 -- but for the pinned ones, fold under "Older than a day". A calm line shows while no zone does.
@@ -2120,19 +2120,8 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 		end
 	end
 
-	-- One project order for every zone: this tab's project first, then the order of `groups` (by name).
+	-- One project order for every zone: by name (see `groups`).
 	local order = viewModel.groups(shown, input.home)
-	for _, agent in input.agents do
-		if agent.pane == shared.focused and agent.state ~= "exited" then
-			local mine = folderOf(agent)
-			for i, group in order do
-				if group.folder == mine then
-					table.insert(order, 1, table.remove(order, i) :: Group)
-					break
-				end
-			end
-		end
-	end
 
 	-- The stopped pins last, then the pins in pin order, then the others in start order.
 	local function before(a: Agent, b: Agent): boolean
