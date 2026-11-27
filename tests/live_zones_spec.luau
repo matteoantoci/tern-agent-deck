@@ -366,7 +366,7 @@ t.test("a full Live view of 10 agents with open crews and cards fits one canvas 
 		}))
 		local crew: { any } = {}
 		for i = 1, 40 do
-			local status = if i <= 6 then "running" elseif i == 7 then "failed" else "done"
+			local status = if i <= 6 then "running" elseif i == 7 then "failed" else "pending"
 			table.insert(crew, {
 				id = "Sub" .. i,
 				name = "Sub" .. i,

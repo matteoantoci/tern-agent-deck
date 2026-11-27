@@ -12,7 +12,7 @@ All your coding agents in one sidebar, in every Tern tab.
 - 📁 **Agents by project.** Inside each zone, agents show under a light project label: the git repo, or the folder outside a repo. Worktrees and ovnfs checkouts go under their main repo.
 - 🔔 **Needs you.** Each waiting agent is a card with its question (2 lines), its wait time and its project and tab, longest wait first. A waiting subagent gets its own card. The Live button shows how many agents need you. A status line segment counts the agents that work and wait, and a toast tells you when an agent off screen waits or finishes.
 - ➖ **Quiet rows.** Each agent is one line: omp's title icon in the color of its state, the title, a strip with one bar per running subagent, and one time (turn timer, wait time or age).
-- 🌳 **Subagents at every depth.** Click an agent's strip to show its subagent lines: each line shows its state, its name, what it does now and its time. Click a line to open that subagent in omp. A failed subagent always shows.
+- 🌳 **Subagents at every depth.** Click an agent's strip to show its subagent lines: one line for each running, waiting, queued or failed subagent, with its state, its name, what it does now and its time. Click a line to open that subagent in omp. A failed subagent always shows. A finished subagent gets no line: the hover card counts it.
 - 🪪 **Hover card.** Point at a row to see its state, tab, title, summary, model, effort, cost and subagent counts.
 - 💲 **Cost.** The hover card shows what a session cost, its subagents included: money spent through API keys, and subscription use at API prices (not billed).
 - ⏳ **Quota.** When every account of a provider is near its quota limit or at it, one line under the Live/Recent switch tells you which one and when it resets.
@@ -46,7 +46,7 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | An agent row | Focuses that agent. It switches the session or brings a parked pane back. If omp shows a subagent, omp goes back to the main session. |
 | A Needs you card | Goes to that agent so that you can answer, or shows that subagent in omp. |
 | A pinned agent that stopped | Resumes its session in a new tab with `omp --resume`. The pin moves to the resumed agent. |
-| The subagent strip after an agent's title (its bars, **N done** or **N subagents**) | Shows or hides that agent's subagent lines. This tab's agent starts with them shown. |
+| The subagent strip after an agent's title (its bars, or **N subagents** while none runs but some wait or are queued) | Shows or hides that agent's subagent lines. This tab's agent starts with them shown. When every subagent finished, the strip does not show. |
 | A subagent line | Opens that subagent in omp's view. |
 | `+` on a project label | Opens a new tab in that project. |
 | **Older than a day** | Shows or hides the idle agents whose last turn ended more than 1 day ago. Pins and this tab's agent always show. |

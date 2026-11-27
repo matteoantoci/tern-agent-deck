@@ -350,7 +350,7 @@ local ROLE = {
 	hover = "agents.hover",
 	--- The strip at the end of an agent's row, open or closed (`agents.strip.open`).
 	strip = "agents.strip",
-	--- The strip's "N done", shown when no subagent runs.
+	--- The strip's "N subagents", shown when no subagent runs but some wait or are queued.
 	tally = "agents.tally",
 	--- One bar of the strip, per running subagent (`agents.bar.running`).
 	bar = "agents.bar.",
@@ -968,13 +968,12 @@ end
 --- `main`; nil when it cannot be told.
 viewModel.subagentFile = subagentFile
 
--- How a subagent line shows a subagent: the state of its square, and the name of that state for a screen reader.
+-- How a subagent line shows a subagent: the state of its square, and the name of that state for a screen reader. A
+-- finished subagent (done or stopped) gets no line.
 local SUB_STATE: { [string]: { state: State, label: string } } = {
 	running = { state = "running", label = "Running" },
 	pending = { state = "idle", label = "Queued" },
-	done = { state = "done", label = "Done" },
 	failed = { state = "failed", label = "Failed" },
-	aborted = { state = "stopped", label = "Stopped" },
 }
 
 -- Whether a subagent runs or waits in the queue: only those take a bar of the strip.
@@ -1017,7 +1016,7 @@ end
 
 -- One subagent at any nesting level, as a line one step under its agent plus one step per depth: its square in the
 -- state's color, its own name (the last level of its omp id), what it does now (the call, with a long path cut to its
--- file name; a failed one with no call shows "failed"; a done one shows none), and its time. The hover card repeats
+-- file name; a failed one with no call shows "failed"), and its time. The hover card repeats
 -- them with the whole call, the role, the parent, the model (as its session file names it, `provider/model`, else
 -- omp's model id) and the
 -- effort. A click asks to show the subagent in omp's view (`subagent=<pane> <omp id>`); a right-click copies the ID
@@ -1037,14 +1036,7 @@ local function subLine(
 	local own = levels[#levels]
 	local shown = subShown(sub, frozen)
 	local intent = nonEmpty(sub.intent)
-	-- A done line shows no call: the hover card keeps it.
-	local call = if sub.status == "done"
-		then nil
-		elseif intent
-		then cutPaths(intent)
-		elseif sub.status == "failed"
-		then "failed"
-		else nonEmpty(role)
+	local call = if intent then cutPaths(intent) elseif sub.status == "failed" then "failed" else nonEmpty(role)
 	local children: { Node } = { squareNode(shown.state, shown.label), nameNode(own, nil, call ~= nil) }
 	if call then
 		table.insert(children, detailNode(call))
@@ -1095,8 +1087,8 @@ local function infoLine(key: string, icon: Node, text: string, style: string, de
 	return { k = "row", p = { key = key, gap = "sm", role = rowRole("info", depth) }, c = children }
 end
 
--- The counts of a crew, as the strip's tooltip and its "N done" read them: the subagents that run, the ones that wait
--- on the user, the ones queued, and the finished ones by result.
+-- The counts of a crew, as the strip, its tooltip and the hover card read them: the subagents that run, the ones that
+-- wait on the user, the ones queued, and the finished ones by result.
 type Crew = { running: number, waiting: number, queued: number, done: number, failed: number, stopped: number }
 
 local function count(subs: subagents.Subagents): Crew
@@ -1142,13 +1134,17 @@ local function crewText(crew: Crew): string
 	return table.concat(parts, " · ")
 end
 
--- The strip at the end of an agent's row, when the agent has subagents: one bar in the working color per running
--- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place; with none
--- running and none done (all queued, waiting or ended otherwise), a neutral "N subagents". A click shows or hides the
--- subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and says what a click
--- does, so that a failure is one hover away also while the lines are closed.
-local function stripNode(pane: string, crew: Crew, total: number, open: boolean): Node
+-- The strip at the end of an agent's row, while a subagent runs, waits or is queued: one bar in the working color per
+-- running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the ones that
+-- wait or are queued. Nil when every subagent finished: then the agent has no subagent lines to show or hide. A click
+-- shows or hides the subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and
+-- says what a click does.
+local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local running = crew.running
+	local pending = crew.waiting + crew.queued
+	if running == 0 and pending == 0 then
+		return nil
+	end
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
@@ -1159,10 +1155,8 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 		if running > STRIP_BARS then
 			table.insert(children, { k = "text", p = { text = "+" .. tostring(running - STRIP_BARS), role = ROLE.more } })
 		end
-	elseif crew.done > 0 then
-		table.insert(children, { k = "text", p = { text = tostring(crew.done) .. " done" } })
 	else
-		table.insert(children, { k = "text", p = { text = tostring(total) .. (if total == 1 then " subagent" else " subagents") } })
+		table.insert(children, { k = "text", p = { text = tostring(pending) .. (if pending == 1 then " subagent" else " subagents") } })
 	end
 	return {
 		k = "row",
@@ -1177,24 +1171,24 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 	}
 end
 
+-- Whether a subagent gets a line: a finished one (done or stopped) gets none, only the hover card counts it.
+local function lined(sub: subagents.Subagent): boolean
+	return sub.depth <= MAX_DEPTH and sub.status ~= "done" and sub.status ~= "aborted"
+end
+
 -- An agent draws at most this many subagent lines, and the whole view at most `VIEW_SUB_LINES`, in the order the
--- agents show: with none running, omp's tray lists every finished subagent of the session, and a canvas update holds
--- at most 2000 nodes and 256 KiB. A line with its hover card is about 10 nodes.
+-- agents show: a canvas update holds at most 2000 nodes and 256 KiB. A line with its hover card is about 10 nodes.
 local SUB_LINES = 20
 local VIEW_SUB_LINES = 100
 
--- The subagents of `subs` that get a line, at most `limit`: first the one the pane shows, then the failed ones (a
--- failure never hides), then the others not finished (running, waiting, queued), then the newest finished ones. Also
--- how many get none.
+-- The subagents of `subs` that get a line (see `lined`), at most `limit`: first the one the pane shows, then the
+-- failed ones (a failure never hides), then the newest of the others (running, waiting, queued). Also how many get
+-- none.
 local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
 	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
 	for index, sub in subs.agents do
-		if sub.depth <= MAX_DEPTH then
-			local rank = if viewing.shows(sub, shown)
-				then 3
-				elseif sub.status == "failed" then 2
-				elseif sub.status ~= "done" and sub.status ~= "aborted" then 1
-				else 0
+		if lined(sub) then
+			local rank = if viewing.shows(sub, shown) then 2 elseif sub.status == "failed" then 1 else 0
 			table.insert(candidates, { sub = sub, index = index, rank = rank })
 		end
 	end
@@ -1218,11 +1212,11 @@ local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: numbe
 end
 
 -- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
--- down per nesting level: every one while the lines are open (`agents.strip.open`), else only the failed ones (a
--- failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see
--- `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
--- subagents sit past the levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css`
--- draws with the accent.
+-- down per nesting level: every one not finished while the lines are open (`agents.strip.open`), else only the
+-- failed ones (a failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES`
+-- (see `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
+-- subagents sit past the levels omp renders. With no strip (every subagent finished), the lines are closed. This
+-- tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1235,7 +1229,12 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local busy = crew.running + crew.waiting > 0
 	local open = if chosen ~= nil then chosen else shared.focused == agent.pane and busy
 	-- The strip goes right after the name, before the time.
-	table.insert(main.c :: { Node }, 3, stripNode(pane, crew, #subs.agents, open))
+	local strip = stripNode(pane, crew, open)
+	if strip then
+		table.insert(main.c :: { Node }, 3, strip)
+	else
+		open = false
+	end
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
@@ -1244,15 +1243,15 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local shown = if shared.focused == agent.pane then viewed else nil
 	local drawn, past = drawnSubs(subs, if open then shown else nil, math.min(SUB_LINES, shared.subLines))
 	for _, sub in subs.agents do
-		local selected = open and viewing.shows(sub, shown)
-		if selected then
-			(main.p :: { [string]: any }).role = rowRole("item", depth)
-		end
 		if sub.depth > MAX_DEPTH then
 			if sub.status == "running" then
 				deeper += 1
 			end
 		elseif (open or sub.status == "failed") and drawn[sub] then
+			local selected = open and viewing.shows(sub, shown)
+			if selected then
+				(main.p :: { [string]: any }).role = rowRole("item", depth)
+			end
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 			local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
 			table.insert(if open then lines else failed, line)

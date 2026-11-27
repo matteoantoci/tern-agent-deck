@@ -1,6 +1,7 @@
 --!strict
--- The subagent strip at the end of an agent's row (one bar per running subagent, or "N done") and the subagent lines
--- it shows or hides under the row.
+-- The subagent strip at the end of an agent's row (one bar per running subagent, or "N subagents" while some only wait
+-- or are queued) and the subagent lines it shows or hides under the row. A finished subagent gets no line: only the
+-- hover card counts it; a failed one always gets a line.
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
@@ -52,19 +53,22 @@ t.test("the strip shows at most 8 bars, then +N", function()
 	t.eq(#visible.bars(out, "Lead"), 8)
 end)
 
-t.test("an agent with subagents but none running shows N done in the strip's place", function()
-	local out = view("idle", { sub("A", "done"), sub("B", "done"), sub("C", "aborted") })
-	t.eq(visible.agentRows(out), { ":sparkle(Idle) Lead [2 done]" })
-	t.eq(visible.bars(out, "Lead"), {})
+t.test("an agent whose subagents all finished has no strip and no toggle; a failed one still shows its line", function()
+	local done = view("idle", { sub("A", "done"), sub("B", "done"), sub("C", "aborted") })
+	t.eq(visible.agentRows(done), { ":sparkle(Idle) Lead" })
+	t.eq(visible.button(done, "Lead"), nil)
+	local failed = view("idle", { sub("A", "done"), sub("B", "failed"), sub("C", "aborted") }, { open = OPEN })
+	t.eq(visible.agentRows(failed), { ":sparkle(Idle) Lead", "■(Failed) B failed" })
+	t.eq(visible.button(failed, "Lead"), nil)
+	t.eq(string.find(visible.hover(done, "Lead") or "", "Subagents: 2 done · 1 stopped", 1, true) ~= nil, true)
 end)
 
-t.test("an agent with subagents but none running and none done shows N subagents in the strip's place", function()
-	local queued = view("working", { sub("A", "pending"), sub("B", "running", 1, { waiting = true }) })
+t.test("an agent with subagents that wait or are queued but none running shows N subagents in the strip's place", function()
+	local queued = view("working", { sub("A", "pending"), sub("B", "running", 1, { waiting = true }), sub("C", "done") })
 	t.eq(visible.agentRows(queued), { ":sparkle(Working) Lead [2 subagents] 0s" })
 	t.eq(visible.bars(queued, "Lead"), {})
 	t.eq(visible.button(queued, "Lead"), "subs=7 open")
-	local stopped = view("idle", { sub("A", "aborted"), sub("B", "aborted"), sub("C", "failed") })
-	t.eq(visible.agentRows(stopped)[1], ":sparkle(Idle) Lead [3 subagents]")
+	t.eq(visible.agentRows(view("working", { sub("A", "pending") }))[1], ":sparkle(Working) Lead [1 subagent] 0s")
 end)
 
 t.test("an agent with no subagents has no strip", function()
@@ -95,14 +99,13 @@ t.test("the strip's tooltip lists every count and what a click does", function()
 	})
 end)
 
-t.test("a click on the strip or on N done shows the closed lines, and a click on open lines hides them", function()
+t.test("a click on the strip shows the closed lines, and a click on open lines hides them; done ones get no line", function()
 	local closed = view("working", { sub("A", "running"), sub("B", "done") })
 	t.eq(visible.agentRows(closed), { ":sparkle(Working) Lead [▮] 0s" })
 	t.eq(visible.button(closed, "Lead"), "subs=7 open")
-	local open = view("working", { sub("A", "running"), sub("B", "done") }, { open = OPEN })
-	t.eq(visible.agentRows(open), { ":sparkle(Working) Lead [▮] 0s", "■(Running) A", "■(Done) B" })
+	local open = view("working", { sub("A", "running"), sub("B", "done"), sub("C", "aborted") }, { open = OPEN })
+	t.eq(visible.agentRows(open), { ":sparkle(Working) Lead [▮] 0s", "■(Running) A" })
 	t.eq(visible.button(open, "Lead"), "subs=7 closed")
-	t.eq(visible.button(view("idle", { sub("B", "done") }), "Lead"), "subs=7 open")
 end)
 
 t.test("this tab's agent shows its subagent lines open until the user closes them", function()
@@ -112,23 +115,17 @@ t.test("this tab's agent shows its subagent lines open until the user closes the
 	t.eq(visible.agentRows(view("working", subs, { focused = 7, open = { [7] = false } })), { ":sparkle(Working) Lead [▮] 0s" })
 end)
 
-t.test("this tab's agent shows its lines closed when every subagent is done or failed, unless the user opened them", function()
-	local subs = { sub("A", "done"), sub("B", "done"), sub("C", "failed") }
-	t.eq(visible.agentRows(view("idle", subs, { focused = 7 })), { ":sparkle(Idle) Lead [2 done]", "■(Failed) C failed" })
+t.test("this tab's agent shows its lines closed while only queued subagents wait, unless the user opened them", function()
+	local subs = { sub("A", "done"), sub("B", "pending"), sub("C", "failed") }
+	t.eq(visible.agentRows(view("idle", subs, { focused = 7 })), { ":sparkle(Idle) Lead [1 subagent]", "■(Failed) C failed" })
 	t.eq(visible.button(view("idle", subs, { focused = 7 }), "Lead"), "subs=7 open")
-	t.eq(#visible.agentRows(view("idle", subs, { focused = 7, open = OPEN })), 4)
+	t.eq(visible.agentRows(view("idle", subs, { focused = 7, open = OPEN })), {
+		":sparkle(Idle) Lead [1 subagent]",
+		"■(Queued) B",
+		"■(Failed) C failed",
+	})
 	local waiting = { sub("A", "done"), sub("B", "running", 1, { waiting = true }) }
 	t.eq(visible.button(view("working", waiting, { focused = 7 }), "Lead"), "subs=7 closed")
-end)
-
-t.test("a done subagent line shows its square, its name and its time only; the other lines keep their call", function()
-	local subs = {
-		sub("A", "done", 1, { intent = "Conflicts: none; the merge was clean", since = -60000 }),
-		sub("B", "running", 1, { intent = "edit x" }),
-		sub("C", "failed", 1, { intent = "build" }),
-	}
-	local rows = visible.agentRows(view("working", subs, { open = OPEN }))
-	t.eq({ rows[2], rows[3], rows[4] }, { "■(Done) A 1m", "■(Running) B edit x", "■(Failed) C build" })
 end)
 
 -- The zone head and the project label above Lead's row, as `visible.tree` shows them.
@@ -147,7 +144,6 @@ t.test("a failed subagent shows as its own line while the lines are closed, one 
 		":sparkle(Working) Lead [▮] 0s",
 		"  ■(Running) A",
 		"    ■(Failed) B failed",
-		"  ■(Done) C",
 	})
 end)
 
@@ -156,14 +152,14 @@ t.test("a subagent line shows its mark, its name, what it does now with a long p
 		sub("Ticket07", "running", 1, { intent = "read /Users/me/repo/lib/view_model.luau", since = -12000 }),
 		sub("Edit", "running", 1, { intent = "edit lib/x.luau", since = -4 * 60000 }),
 		sub("Probe", "running", 1, { role = "scout" }),
-		sub("Copy", "done", 1, { since = -3 * 3600000 }),
+		sub("Copy", "failed", 1, { since = -3 * 3600000 }),
 	}, { open = OPEN })
 	t.eq(visible.agentRows(out), {
 		":sparkle(Working) Lead [▮ ▮ ▮] 0s",
 		"■(Running) Ticket07 read …/view_model.luau 12s",
 		"■(Running) Edit edit lib/x.luau 4m",
 		"■(Running) Probe scout",
-		"■(Done) Copy 3h",
+		"■(Failed) Copy failed 3h",
 	})
 	t.eq(visible.secondary(out, "read …/view_model.luau"), true)
 	t.eq(visible.face(out, "Ticket07"), "sans")
@@ -183,9 +179,7 @@ t.test("each subagent line's square carries its state", function()
 		"running: ■(Running) A",
 		"waiting: ■(Waiting on its subagents) B",
 		"idle: ■(Queued) C",
-		"done: ■(Done) D",
 		"failed: ■(Failed) E failed",
-		"stopped: ■(Stopped) F",
 	})
 end)
 
@@ -215,13 +209,13 @@ end)
 t.test("a subagent line's hover card shows what it does, its role, parent, model and effort", function()
 	local out = view("working", {
 		sub("Ticket07", "running", 1, { intent = "Running probe", model = "claude-opus-5-5", role = "scout", effort = "high" }),
-		sub("Ticket07>Fix", "done", 2, { parent = "Ticket07" }),
+		sub("Ticket07>Fix", "failed", 2, { parent = "Ticket07" }),
 	}, { open = OPEN })
 	t.eq(
 		visible.hover(out, "Ticket07"),
 		"■ Running\nTicket07\nRunning probe\nscout · claude-opus-5-5 high\nClick: show it in omp"
 	)
-	t.eq(visible.hover(out, "Fix"), "■ Done\nFix\nunder Ticket07\nClick: show it in omp")
+	t.eq(visible.hover(out, "Fix"), "■ Failed\nFix\nunder Ticket07\nClick: show it in omp")
 	t.eq(visible.titles(out, "Ticket07"), {})
 end)
 
@@ -275,7 +269,6 @@ t.test("a working agent in a project shows its open subagent lines inside that p
 		"alpha [:plus](New tab in this repo)",
 		":sparkle(Working) Lead [▮] 0s",
 		"■(Running) Ticket07",
-		"■(Done) A",
 		"■ Idle 2",
 		"beta [:plus](New tab in this repo)",
 		":sparkle(Idle) Docs",
@@ -293,21 +286,21 @@ t.test("a shown subagent line's time changes on its own, so the sidebar redraws 
 	}), 500)
 end)
 
-t.test("open lines show at most 20 subagents: the running and failed ones, then the newest done, then +N more", function()
-	-- With none running, omp's tray lists every finished subagent of the session; a canvas update holds at most 2000
-	-- nodes and 256 KiB.
-	local subs: { any } = { sub("Run", "running", 1, { since = 1 }), sub("Bad", "failed", 1, { since = 2 }) }
+t.test("open lines show at most 20 subagents: the failed ones, then the newest of the others, then +N more", function()
+	-- A canvas update holds at most 2000 nodes and 256 KiB. Done subagents get no line, so they take none of the 20.
+	local subs: { any } = { sub("Run", "running", 1, { since = 300 }), sub("Bad", "failed", 1, { since = 2 }) }
 	for i = 1, 150 do
 		local intent = "Read /Users/me/Personal/tern-agent-deck/lib/view_model.luau and report what the code does " .. i
-		table.insert(subs, sub("Done" .. i, "done", 1, { since = 10 + i, role = "task", model = "claude-opus-5-5", intent = intent }))
+		table.insert(subs, sub("Queued" .. i, "pending", 1, { since = 10 + i, role = "task", model = "claude-opus-5-5", intent = intent }))
+		table.insert(subs, sub("Done" .. i, "done", 1, { since = 400 + i }))
 	end
-	local shown = view("idle", subs, { focused = 7, now = 200 })
+	local shown = view("idle", subs, { focused = 7, now = 600 })
 	local rows = visible.agentRows(shown)
 	t.eq(#rows, 1 + 20 + 1)
 	t.eq(string.find(rows[2], "Run", 1, true) ~= nil, true)
 	t.eq(string.find(rows[3], "Bad", 1, true) ~= nil, true)
-	t.eq(string.find(rows[4], "Done133", 1, true) ~= nil, true)
-	t.eq(string.find(rows[21], "Done150", 1, true) ~= nil, true)
+	t.eq(string.find(rows[4], "Queued133", 1, true) ~= nil, true)
+	t.eq(string.find(rows[21], "Queued150", 1, true) ~= nil, true)
 	t.eq(rows[22], ":more +132 more")
 	local nodes, bytes = visible.size(shown)
 	t.eq(nodes < 2000, true)

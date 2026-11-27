@@ -383,7 +383,8 @@
 }
 
 /* The subagent strip after an agent's title: one 3×12 bar in the working color per running subagent, then "+N";
-   with none running, a neutral "N done". A click shows or hides the subagent lines. */
+   with none running, a neutral "N subagents" for the ones that wait or are queued. A click shows or hides the
+   subagent lines. */
 [data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']) {
 	flex: none;
 	display: flex;
