@@ -107,16 +107,36 @@ local function part(n: Node): string?
 	return shown
 end
 
+-- A row inside a row that takes a click and is no list row (no `agents.<kind>.<depth>` role): a control of its row,
+-- as a button is (the subagent strip), not a row of its own.
+local function isControl(n: Node): boolean
+	local p = props(n)
+	local role = p.role
+	return n.k == "row"
+		and p.actions ~= nil
+		and p.actions.click ~= nil
+		and not (type(role) == "string" and string.match(role, "^agents%.%a+%.%d+$"))
+end
+
 local function hasRow(n: Node): boolean
 	for _, child in kids(n) do
-		if child.k == "row" or hasRow(child) then
+		if (child.k == "row" and not isControl(child)) or hasRow(child) then
 			return true
 		end
 	end
 	return false
 end
 
+-- A control shows as its parts in brackets, as a button does; its tooltip is left out (`titles` reads it).
 local function render(n: Node, out: { string })
+	if isControl(n) then
+		local inner: { string } = {}
+		for _, child in kids(n) do
+			render(child, inner)
+		end
+		table.insert(out, "[" .. table.concat(inner, " ") .. "]")
+		return
+	end
 	local shown = part(n)
 	if shown then
 		table.insert(out, shown)
@@ -363,8 +383,9 @@ function visible.click(view: Node, text: string): string?
 end
 
 -- The state that `role` carries (`agents.glyph.<state>` for a title icon, `agents.square.<state>` for a zone head's
--- square, `agents.dot.<state>` for a state dot, `agents.mark.<state>` for a state icon), or nil.
-local STATE_PARTS = { glyph = true, square = true, dot = true, mark = true }
+-- or a subagent line's square, `agents.dot.<state>` for a state dot, `agents.mark.<state>` for a state icon,
+-- `agents.bar.<state>` for a bar of the subagent strip), or nil.
+local STATE_PARTS = { glyph = true, square = true, dot = true, mark = true, bar = true }
 
 local function stateOf(role: any): string?
 	if type(role) ~= "string" then
@@ -431,15 +452,32 @@ function visible.stateColors(view: Node): { string }
 	return out
 end
 
---- The action a click on the first button in the row that shows `text` sends, or nil when it has no button.
+--- The action a click on the first button or control (the subagent strip) in the row that shows `text` sends, or
+--- nil when it has none.
 function visible.button(view: Node, text: string): string?
 	for _, child in kids(findRow(view, text)) do
-		if child.k == "button" then
+		if child.k == "button" or isControl(child) then
 			local actions = props(child).actions
 			return actions and actions.click
 		end
 	end
 	return nil
+end
+
+--- The state of each bar of the subagent strip in the row that shows `text`, in order; empty when it has none.
+function visible.bars(view: Node, text: string): { string }
+	local out: { string } = {}
+	local function walk(n: Node)
+		local role = props(n).role
+		if type(role) == "string" and string.match(role, "^agents%.bar%.") then
+			table.insert(out, stateOf(role) or "?")
+		end
+		for _, child in kids(n) do
+			walk(child)
+		end
+	end
+	walk(findRow(view, text))
+	return out
 end
 
 -- Menu items, one line each: the label and the action, and why it is off when it is disabled.
