@@ -43,11 +43,12 @@
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
-/* The switch ends on its own hairline, and the shown view's underline sits on it, as in Tern's own tab strips. */
+/* The switch ends on its own hairline, and the shown view's underline sits on it, as in Tern's own tab strips. The
+   views carry 8px of padding each, so the switch has none and no gap: the texts stay 8px in and 16px apart. */
 [data-role='agents.root'] [data-role='agents.views'] {
 	height: 40px;
-	gap: 16px;
-	padding: 0 8px;
+	gap: 0;
+	padding: 0;
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
@@ -71,20 +72,16 @@
 	color: inherit;
 }
 
+/* Each view keeps Tern's button fill on hover, press and focus, with 8px on each side of the text and the chip radius
+   on top only, so the shown view's underline stays square on the hairline. */
 [data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) {
 	height: 40px;
 	min-width: 0;
-	padding: 0;
-	border-radius: 0;
-	background: transparent;
+	padding: 0 8px;
+	border-radius: var(--r-chip) var(--r-chip) 0 0;
 	font: 400 13px/20px var(--sans);
 	color: var(--t3);
 	transition: color 0.15s var(--ease);
-}
-
-/* Tern's button fill never shows on the switch, on the shown view too: hover only brightens the text. */
-[data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']):is(:hover, :active, :focus) {
-	background: transparent;
 }
 
 [data-role='agents.root'] [data-role='agents.view']:hover {
@@ -97,9 +94,9 @@
 	box-shadow: inset 0 -1px 0 var(--t1);
 }
 
-/* The waiting mark and the number of Needs you cards, 4px after Live (the switch keeps 16px between its views). */
+/* The waiting mark and the number of Needs you cards, 4px after the Live text (inside Live's 8px right padding). */
 [data-role='agents.views'] > :is([data-role='agents.square.waiting'], [data-role='agents.needs']) {
-	margin-left: -12px;
+	margin-left: -4px;
 }
 
 [data-role='agents.views'] > [data-role='agents.needs'] {
