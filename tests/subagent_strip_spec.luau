@@ -58,10 +58,13 @@ t.test("an agent with subagents but none running shows N done in the strip's pla
 	t.eq(visible.bars(out, "Lead"), {})
 end)
 
-t.test("an agent with subagents but none running and none done shows no strip slot, not 0 done", function()
-	local out = view("idle", { sub("A", "aborted"), sub("B", "aborted") })
-	t.eq(visible.agentRows(out), { ":sparkle(Idle) Lead" })
-	t.eq(visible.button(out, "Lead"), nil)
+t.test("an agent with subagents but none running and none done shows N subagents in the strip's place", function()
+	local queued = view("working", { sub("A", "pending"), sub("B", "running", 1, { waiting = true }) })
+	t.eq(visible.agentRows(queued), { ":sparkle(Working) Lead [2 subagents] 0s" })
+	t.eq(visible.bars(queued, "Lead"), {})
+	t.eq(visible.button(queued, "Lead"), "subs=7 open")
+	local stopped = view("idle", { sub("A", "aborted"), sub("B", "aborted"), sub("C", "failed") })
+	t.eq(visible.agentRows(stopped)[1], ":sparkle(Idle) Lead [3 subagents]")
 end)
 
 t.test("an agent with no subagents has no strip", function()
@@ -190,16 +193,16 @@ t.test("a click on a subagent line asks to show that subagent in omp's view, at 
 	t.eq(visible.click(closed, "Gone"), "subagent=7 Gone")
 end)
 
-t.test("a subagent line's hover card shows its role, parent, model, effort and what it does", function()
+t.test("a subagent line's hover card shows what it does, its role, parent, model and effort", function()
 	local out = view("working", {
 		sub("Ticket07", "running", 1, { intent = "Running probe", model = "claude-opus-5-5", role = "scout", effort = "high" }),
 		sub("Ticket07>Fix", "done", 2, { parent = "Ticket07" }),
 	}, { open = OPEN })
 	t.eq(
 		visible.hover(out, "Ticket07"),
-		"Ticket07 · Running\nRole scout\nModel claude-opus-5-5\nEffort high\nDoing Running probe"
+		"■ Running\nTicket07\nRunning probe\nscout · claude-opus-5-5 high\nClick: show it in omp"
 	)
-	t.eq(visible.hover(out, "Fix"), "Fix · Done\nUnder Ticket07")
+	t.eq(visible.hover(out, "Fix"), "■ Done\nFix\nunder Ticket07\nClick: show it in omp")
 	t.eq(visible.titles(out, "Ticket07"), {})
 end)
 
@@ -219,8 +222,9 @@ t.test("a subagent's model comes from its session file's route when known, else 
 		},
 		routes = { ["/s/main/Lead.jsonl"] = "anthropic/claude-opus-5-5" },
 	}).view
-	t.eq(visible.hover(out, "(Running) Lead"), "Lead · Running\nModel anthropic/claude-opus-5-5")
-	t.eq(visible.hover(out, "(Running) Fix"), "Fix · Running\nUnder Lead\nModel gpt-5.1")
+	local hint = "Click: show it in omp · Right-click: Copy session ID or path"
+	t.eq(visible.hover(out, "(Running) Lead"), "■ Running\nLead\nanthropic/claude-opus-5-5\n" .. hint)
+	t.eq(visible.hover(out, "(Running) Fix"), "■ Running\nFix\nunder Lead · gpt-5.1\n" .. hint)
 end)
 
 t.test("open lines from a read that Tern cut say that the subagents may be incomplete", function()

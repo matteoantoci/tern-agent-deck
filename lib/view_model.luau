@@ -45,6 +45,9 @@ export type Agent = {
 	--- The omp session file the agent's omp reported to Tern (`omp_session_file` in `tern inspect`); nil for an agent
 	--- that reported none (not omp, or not read yet).
 	sessionFile: string?,
+	--- The command the agent's block runs (`omp`, `claude --resume`), as `cx.agents:list()` gives it; the hover card
+	--- names the kind of agent from it.
+	command: string?,
 }
 
 --- A pinned agent, as `tern.kv` keeps it: the pane id, with the working directory and the pane title as backup keys
@@ -151,14 +154,6 @@ export type Output = {
 -- updated live: a closed session's dot, or the square of a subagent the sidebar cannot read while omp shows another
 -- one (it may still run). Only a working agent's title icon moves: `agents.css` fades it slowly.
 type State = "working" | "waiting" | "idle" | "exited" | "running" | "done" | "failed" | "stopped" | "frozen"
-
--- What the hover card says each agent state is.
-local LABEL: { [AgentState]: string } = {
-	working = "Working",
-	waiting_input = "Waiting for you",
-	idle = "Idle",
-	exited = "Exited",
-}
 
 -- `text` cut to at most `bytes` bytes at the start of a UTF-8 character, with `…`; whole when it fits.
 local function clip(text: string, bytes: number): string
@@ -420,13 +415,16 @@ local function titleGlyph(title: string?): string?
 end
 
 -- A row's title icon in the color of `state`: omp's icon character from `title`, else Tern's agent icon. `label`
--- names the state for a screen reader.
-local function titleIcon(title: string?, state: State, label: string): Node
+-- names the state for a screen reader; a hover card's icon has none, as the state's name follows it.
+local function titleIcon(title: string?, state: State, label: string?): Node
 	local glyph = titleGlyph(title)
-	if glyph then
-		return { k = "text", p = { text = glyph, wrap = "none", aria = label, role = ROLE.glyph .. state } }
+	local p: { [string]: any } = if glyph
+		then { text = glyph, wrap = "none", role = ROLE.glyph .. state }
+		else { name = AGENT_ICON, role = ROLE.glyph .. state }
+	if label then
+		p.aria = label
 	end
-	return { k = "icon", p = { name = AGENT_ICON, aria = label, role = ROLE.glyph .. state } }
+	return { k = if glyph then "text" else "icon", p = p }
 end
 
 -- `seconds` in its largest whole unit, the one time format of the sidebar: `45s`, `4m`, `3h`, `2d`.
@@ -447,7 +445,7 @@ local function timeNode(seconds: number): Node
 	return { k = "text", p = { text = duration(seconds), wrap = "none", role = ROLE.time } }
 end
 
--- A hover card's facts: an aligned grid of muted labels and their values, as `tern.ui.kv` builds it.
+-- A grid of muted labels and their values, as `tern.ui.kv` builds it (a project label's hover card).
 type Facts = { { k: string, v: string } }
 
 local function factsNode(facts: Facts): Node?
@@ -461,27 +459,97 @@ local function factsNode(facts: Facts): Node?
 	return { k = "kv", p = { items = items } }
 end
 
--- The hover card's first line: the name, the state after it and, while the agent works, the live turn timer.
-local function cardHead(name: string, state: string, age: number?): Node
-	local text: Node = { k = "text", p = { spans = { { t = name, s = "strong" }, { t = " · " .. state, s = "muted" } } } }
-	if not age then
-		return text
-	end
-	local children: { Node } = { text, { k = "elapsed", p = { age = age } } }
-	return { k = "row", p = { gap = "sm" }, c = children }
+-- The parts of a hover card, top to bottom; a part that is nil or empty is left out.
+type Card = {
+	--- The mark in the state's color (no screen-reader label: the state's name follows it).
+	mark: Node,
+	--- The state's name.
+	state: string,
+	--- How long the state has lasted, in seconds; nil when unknown.
+	seconds: number?,
+	--- How long a working agent's turn has run, in milliseconds: the top line counts it on live.
+	turn: number?,
+	--- The tab ("tab 3"), at the end of the top line.
+	tab: string?,
+	--- The title.
+	name: string,
+	--- The summary or last message, or what a subagent does now.
+	message: Node?,
+	--- Facts on one muted line, joined by " · ": the kind, the model and effort, pinned; for a subagent its role,
+	--- parent, model and effort; for a closed session its folder.
+	facts: { string },
+	--- What the agent's session cost: real money and subscription use, one line each; nil when not known.
+	cost: { Node }?,
+	--- The subagent counts ("2 running · 1 done").
+	crew: string?,
+	--- A muted note under the facts.
+	note: string?,
+	--- What a click and a right-click do.
+	hint: string,
+}
+
+local function muted(text: string, style: string?): Node
+	return { k = "text", p = { spans = { { t = text, s = style or "muted" } } } }
 end
 
--- A hover card: its head, its facts, then the rest, with room between the parts.
-local function card(head: Node, facts: Facts, rest: { Node }): Node
-	local children: { Node } = { head }
-	local grid = factsNode(facts)
-	if grid then
-		table.insert(children, grid)
+-- A hover card: the state, its time and the tab on the top line, then the title, the message, the facts, the cost,
+-- the subagent counts and a note, and last the hint.
+local function card(parts: Card): Node
+	local top: { Node } = { parts.mark, { k = "text", p = { text = parts.state } } }
+	if parts.turn then
+		table.insert(top, { k = "elapsed", p = { age = parts.turn } })
+	elseif parts.seconds then
+		table.insert(top, { k = "text", p = { spans = { { t = duration(parts.seconds), s = "num" } } } })
 	end
-	for _, node in rest do
-		table.insert(children, node)
+	if parts.tab then
+		table.insert(top, muted(parts.tab))
 	end
+	local children: { Node } = {
+		{ k = "row", p = { gap = "sm" }, c = top },
+		{ k = "text", p = { spans = { { t = parts.name, s = "strong" } } } },
+	}
+	if parts.message then
+		table.insert(children, parts.message)
+	end
+	if #parts.facts > 0 then
+		table.insert(children, muted(table.concat(parts.facts, " · ")))
+	end
+	if parts.cost then
+		for _, line in parts.cost do
+			table.insert(children, line)
+		end
+	end
+	if parts.crew then
+		table.insert(children, muted("Subagents: " .. parts.crew))
+	end
+	if parts.note then
+		table.insert(children, muted(parts.note))
+	end
+	table.insert(children, muted(parts.hint, "dim"))
 	return { k = "col", p = { gap = "sm" }, c = children }
+end
+
+-- A hover card's hint: what a click does (`click`, nil when it does nothing), then the items of the right-click menu
+-- that are on, the two copy items as one.
+local function hintText(click: string?, items: { { [string]: any } }): string
+	local labels: { string } = {}
+	for _, item in items do
+		if not item.disabled then
+			if item.label == "Copy session path" and labels[#labels] == "Copy session ID" then
+				labels[#labels] = "Copy session ID or path"
+			else
+				table.insert(labels, item.label)
+			end
+		end
+	end
+	local parts: { string } = {}
+	if click then
+		table.insert(parts, "Click: " .. click)
+	end
+	if #labels > 0 then
+		table.insert(parts, "Right-click: " .. table.concat(labels, ", "))
+	end
+	return table.concat(parts, " · ")
 end
 
 -- A last message this long or longer gets a summary from omp's light model (`lib/summaries.luau`); a shorter one
@@ -529,6 +597,39 @@ local function modelRoute(model: string?): string?
 	return nonEmpty(route)
 end
 
+-- A model and its effort as a hover card's facts show them (`anthropic/claude-opus-5-5 high`); nil when neither is
+-- known.
+local function modelText(model: string?, effort: string?): string?
+	if model and effort then
+		return model .. " " .. effort
+	elseif effort then
+		return "effort " .. effort
+	end
+	return model
+end
+
+-- The kind of agent each program is, as the hover card names it; another program shows its own name.
+local KIND: { [string]: string } = { omp = "omp", claude = "Claude Code", codex = "Codex" }
+
+-- The kind of `agent`: omp when it reported an omp session file, else the program of its command (past `VAR=value`
+-- prefixes and `env`); nil when neither is known.
+local function kindOf(agent: Agent): string?
+	if agent.sessionFile then
+		return KIND.omp
+	end
+	local command = nonEmpty(agent.command)
+	if not command then
+		return nil
+	end
+	for word in string.gmatch(command, "%S+") do
+		if word ~= "env" and not string.find(word, "=", 1, true) then
+			local program = string.match(word, "([^/]+)/*$") or word
+			return KIND[program] or program
+		end
+	end
+	return nil
+end
+
 -- How an agent's row shows its state: the state of its title icon, the name of that state, and the time the row
 -- shows in seconds (the turn timer while it works; while it waits, the wait; else the time since its last turn),
 -- nil when unknown.
@@ -548,10 +649,22 @@ local function shownState(agent: Agent, shared: Shared): Shown
 	return { state = "idle", label = "Idle", seconds = since }
 end
 
+-- What a click on an agent's row does, as its hover card says it: nil for a stopped agent with no session to resume.
+local function clickText(agent: Agent): string?
+	if agent.state == "exited" then
+		return if agent.sessionFile then "resume in a new tab" else nil
+	elseif agent.state == "waiting_input" then
+		return "go to it and answer"
+	end
+	return "go to it"
+end
+
 -- An agent's row at `depth`: its title icon in the state's color, its title, and its time; a stopped agent's row adds
--- a resume icon that shows on hover. A row carries no tooltip: its hover card holds every fact: the state and the
--- live turn timer, the model, the effort and the last message (or its summary).
-local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number): Node
+-- a resume icon that shows on hover. A row carries no tooltip: its hover card holds every fact: the state and its time
+-- (the live turn timer while it works), the tab, the title, the summary or last message, the kind, the model and
+-- effort, whether it is pinned, the subagent counts (`crew`, nil for an agent with no subagents) and a hint of what a
+-- click and a right-click do.
+local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number, crew: string?): Node
 	local shown = shownState(agent, shared)
 	local children: { Node } = { titleIcon(agent.title, shown.state, shown.label), nameNode(rowTitle(agent, shared)) }
 	if shown.seconds then
@@ -560,35 +673,45 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number)
 	if agent.state == "exited" then
 		table.insert(children, { k = "icon", p = { name = "play", role = ROLE.hover } })
 	end
-	local facts: Facts = {}
+	local facts: { string } = {}
+	local kind = kindOf(agent)
+	if kind then
+		table.insert(facts, kind)
+	end
 	-- omp's session names the model as `provider/model`; an agent without one (not omp) shows Tern's model name, in
 	-- lower case as the routes are.
 	local display = plainModel(agent.model)
-	local model = modelRoute(agent.route) or (display and string.lower(display))
+	local model = modelText(modelRoute(agent.route) or (display and string.lower(display)), nonEmpty(agent.effort))
 	if model then
-		table.insert(facts, { k = "Model", v = model })
+		table.insert(facts, model)
 	end
-	local effort = nonEmpty(agent.effort)
-	if effort then
-		table.insert(facts, { k = "Effort", v = effort })
+	if pinned then
+		table.insert(facts, "pinned")
 	end
-	local age = if agent.state == "working" then math.max(0, shared.now - (agent.workingSince or shared.now)) else nil
-	local rest: { Node } = {}
 	local message = nonEmpty(agent.lastMessage)
-	if message then
-		table.insert(rest, messageNode(message, agent.summary, agent.summarizing))
-	end
 	local pane = string.format("%.0f", agent.pane)
 	-- A stopped agent (it shows only while pinned) has no program to focus: a click resumes its session.
 	local click = if agent.state == "exited" and agent.sessionFile
 		then "resume=" .. agent.sessionFile
 		else "focus=" .. pane
+	local items = menu(agent, pane, pinned, shared.viewing[agent.pane] ~= nil)
 	local props: { [string]: any } = {
 		key = "agent-" .. pane,
 		gap = "sm",
 		role = rowRole(if shared.focused == agent.pane then "on" else "item", depth),
-		actions = { click = click, menu = menu(agent, pane, pinned, shared.viewing[agent.pane] ~= nil) },
-		hovercard = card(cardHead(name(agent, shared), LABEL[agent.state], age), facts, rest),
+		actions = { click = click, menu = items },
+		hovercard = card({
+			mark = titleIcon(agent.title, shown.state),
+			state = shown.label,
+			seconds = shown.seconds,
+			turn = if agent.state == "working" then math.max(0, shared.now - (agent.workingSince or shared.now)) else nil,
+			tab = if agent.tab then string.format("tab %.0f", agent.tab) else nil,
+			name = rowTitle(agent, shared),
+			message = if message then messageNode(message, agent.summary, agent.summarizing) else nil,
+			facts = facts,
+			crew = crew,
+			hint = hintText(clickText(agent), items),
+		}),
 	}
 	return { k = "row", p = props, c = children }
 end
@@ -916,10 +1039,10 @@ end
 
 -- One subagent at any nesting level, as a line one step under its agent plus one step per depth: its square in the
 -- state's color, its own name (the last level of its omp id), what it does now (the call, with a long path cut to its
--- file name; a failed one with no call shows "failed"), and its time. The hover card repeats them with the model (as
--- its session file names it, `provider/model`, else omp's model id), the effort and the whole call. A click asks to
--- show the subagent in omp's view (`subagent=<pane> <omp id>`); a right-click copies the ID or path of its own
--- session file, found from its agent's (`agentFile`).
+-- file name; a failed one with no call shows "failed"), and its time. The hover card repeats them with the whole call,
+-- the role, the parent, the model (as its session file names it, `provider/model`, else omp's model id) and the
+-- effort. A click asks to show the subagent in omp's view (`subagent=<pane> <omp id>`); a right-click copies the ID
+-- or path of its own session file, found from its agent's (`agentFile`).
 local function subLine(
 	sub: subagents.Subagent,
 	pane: string,
@@ -948,40 +1071,36 @@ local function subLine(
 	if seconds then
 		table.insert(children, timeNode(seconds))
 	end
-	local facts: Facts = {}
+	local facts: { string } = {}
 	if role then
-		table.insert(facts, { k = "Role", v = role })
+		table.insert(facts, role)
 	end
 	if parent then
-		table.insert(facts, { k = "Under", v = parent })
+		table.insert(facts, "under " .. parent)
 	end
 	local file = subagentFile(agentFile, sub.name)
-	local model = modelRoute(file and shared.routes[file]) or modelRoute(sub.model)
+	local model = modelText(modelRoute(file and shared.routes[file]) or modelRoute(sub.model), nonEmpty(sub.effort))
 	if model then
-		table.insert(facts, { k = "Model", v = model })
+		table.insert(facts, model)
 	end
-	local effort = nonEmpty(sub.effort)
-	if effort then
-		table.insert(facts, { k = "Effort", v = effort })
-	end
-	if intent then
-		table.insert(facts, { k = "Doing", v = intent })
-	end
-	local rest: { Node } = {}
-	if frozen then
-		table.insert(rest, { k = "text", p = { spans = { { t = "Not updated while omp shows another subagent", s = "muted" } } } })
-	end
+	local items = copyItems(file, if agentFile then "The subagent's name is no omp id" else NO_SESSION_FILE)
 	return {
 		k = "row",
 		p = {
 			key = "sub-" .. keyPart(sub.id),
 			gap = "sm",
 			role = rowRole(if selected then "on" else "item", depth),
-			actions = {
-				click = "subagent=" .. pane .. " " .. sub.id,
-				menu = copyItems(file, if agentFile then "The subagent's name is no omp id" else NO_SESSION_FILE),
-			},
-			hovercard = card(cardHead(own, shown.label), facts, rest),
+			actions = { click = "subagent=" .. pane .. " " .. sub.id, menu = items },
+			hovercard = card({
+				mark = squareNode(shown.state),
+				state = shown.label,
+				seconds = seconds,
+				name = own,
+				message = if intent then { k = "text", p = { text = intent } } else nil,
+				facts = facts,
+				note = if frozen then "Not updated while omp shows another subagent" else nil,
+				hint = hintText("show it in omp", items),
+			}),
 		},
 		c = children,
 	}
@@ -1043,14 +1162,11 @@ end
 
 -- The strip at the end of an agent's row, when the agent has subagents: one bar in the working color per running
 -- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place; with none
--- running and none done, no strip. A click shows or hides the subagent lines (`subs=<pane> open` or
--- `subs=<pane> closed`); the tooltip lists every count and says what a click does, so that a failure is one hover
--- away also while the lines are closed.
-local function stripNode(pane: string, crew: Crew, open: boolean): Node?
+-- running and none done (all queued, waiting or ended otherwise), a neutral "N subagents". A click shows or hides the
+-- subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and says what a click
+-- does, so that a failure is one hover away also while the lines are closed.
+local function stripNode(pane: string, crew: Crew, total: number, open: boolean): Node
 	local running = crew.running
-	if running == 0 and crew.done == 0 then
-		return nil
-	end
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
@@ -1061,8 +1177,10 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 		if running > STRIP_BARS then
 			table.insert(children, { k = "text", p = { text = "+" .. tostring(running - STRIP_BARS), role = ROLE.more } })
 		end
-	else
+	elseif crew.done > 0 then
 		table.insert(children, { k = "text", p = { text = tostring(crew.done) .. " done" } })
+	else
+		table.insert(children, { k = "text", p = { text = tostring(total) .. (if total == 1 then " subagent" else " subagents") } })
 	end
 	return {
 		k = "row",
@@ -1082,20 +1200,16 @@ end
 -- failure never hides). A warning line says when Tern cut the read, and one that +N running subagents sit past the
 -- levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
-	local main = row(agent, shared, pinned, depth)
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
-		return main
+		return row(agent, shared, pinned, depth)
 	end
 	local pane = string.format("%.0f", agent.pane)
 	local crew = count(subs)
+	local main = row(agent, shared, pinned, depth, crewText(crew))
 	local chosen = shared.subsOpen[agent.pane]
 	local open = if chosen ~= nil then chosen else shared.focused == agent.pane
 	-- The strip goes right after the name, before the time.
-	local children = main.c :: { Node }
-	local strip = stripNode(pane, crew, open)
-	if strip then
-		table.insert(children, 3, strip)
-	end
+	table.insert(main.c :: { Node }, 3, stripNode(pane, crew, #subs.agents, open))
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
@@ -1319,19 +1433,30 @@ end
 local RECENT_SESSIONS = 5
 
 -- A closed session at `depth`: a hollow dot, its title with omp's icon (or "Untitled") and, at the right end, how
--- long ago it was last written. A click resumes it in a new tab; a right-click copies its ID or path.
-local function sessionRow(session: Session, time: number?, depth: number): Node
+-- long ago it was last written. A click resumes it in a new tab; a right-click copies its ID or path. Its hover card
+-- says how long ago it closed, its title, its folder and what a click and a right-click do.
+local function sessionRow(session: Session, time: number?, depth: number, home: string?): Node
+	local seconds = if time then time - session.at else nil
 	local children: { Node } = { dotNode("exited", "Closed", true), nameNode(shownTitle(session.title) or "Untitled") }
-	if time then
-		table.insert(children, timeNode(time - session.at))
+	if seconds then
+		table.insert(children, timeNode(seconds))
 	end
+	local items = copyItems(session.file, NO_SESSION_FILE)
 	return {
 		k = "row",
 		p = {
 			key = "session-" .. keyPart(session.id or session.file),
 			gap = "sm",
 			role = rowRole("item", depth),
-			actions = { click = "resume=" .. session.file, menu = copyItems(session.file, NO_SESSION_FILE) },
+			actions = { click = "resume=" .. session.file, menu = items },
+			hovercard = card({
+				mark = titleIcon(session.title, "stopped"),
+				state = "Closed",
+				seconds = seconds,
+				name = plainTitle(session.title) or "Untitled",
+				facts = { viewModel.shortPath(session.cwd, home) },
+				hint = hintText("resume in a new tab", items),
+			}),
 		},
 		c = children,
 	}
@@ -1369,7 +1494,7 @@ local function recentFolder(folder: string, repo: boolean, sessions: { Session }
 	}
 	if open then
 		for i = 1, count do
-			table.insert(rows, sessionRow(sessions[i], time, depth + 1))
+			table.insert(rows, sessionRow(sessions[i], time, depth + 1, input.home))
 		end
 	end
 	return { k = "col", p = { key = key, gap = "none" }, c = rows }
@@ -1565,15 +1690,17 @@ local function needsCards(input: Input, shared: Shared): { NeedsCard }
 		pinned[agent.pane] = true
 	end
 	local cards: { NeedsCard } = {}
+	local subs = input.subagents or {}
 	for _, agent in waitOrder(input.agents) do
 		local shown = shownState(agent, shared)
 		local pane = string.format("%.0f", agent.pane)
-		local from = row(agent, shared, pinned[agent.pane] == true, 0)
+		local crew = subs[agent.pane]
+		local counts = if crew and #crew.agents > 0 then crewText(count(crew)) else nil
+		local from = row(agent, shared, pinned[agent.pane] == true, 0, counts)
 		local icon = titleIcon(agent.title, "waiting", shown.label)
 		local node = needsCard("need-" .. pane, icon, rowTitle(agent, shared), shown.seconds, nonEmpty(agent.lastMessage), cardFooter(agent), from)
 		table.insert(cards, { seconds = shown.seconds or 0, node = node })
 	end
-	local subs = input.subagents or {}
 	for _, agent in startOrder(input.agents) do
 		local crew = subs[agent.pane]
 		if crew and agent.state ~= "exited" then

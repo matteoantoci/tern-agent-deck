@@ -21,9 +21,12 @@ t.test("an idle agent shows as one row with omp's icon in the idle state and its
 	t.eq(rows({ agent({}) }), { ICON .. "(Idle) Fix login" })
 end)
 
+-- What a right-click offers an agent that reported no session file, as its hover card's hint says.
+local IDLE_HINT = "Click: go to it · Right-click: Pin"
+
 t.test("a working row's hover card counts the turn from its start", function()
 	local view = viewModel.build({ agents = { agent({ state = "working", workingSince = 1000 }) }, now = 66000 }).view
-	t.eq(visible.hover(view, "Fix login"), ICON .. " Fix login · Working ⏱65s")
+	t.eq(visible.hover(view, "Fix login"), ICON .. " Working ⏱65s\nFix login\nClick: go to it · Right-click: Pin, Interrupt")
 end)
 
 t.test("an agent whose title holds only omp's icon shows its folder name", function()
@@ -32,7 +35,7 @@ end)
 
 t.test("the hover card names the model without its glyph and with no logo", function()
 	local view = viewModel.build({ agents = { agent({ model = "Opus 5.5 \u{F0EB}" }) }, now = 0 }).view
-	t.eq(visible.hover(view, "Fix login"), ICON .. " Fix login · Idle\nModel opus 5.5")
+	t.eq(visible.hover(view, "Fix login"), ICON .. " Idle\nFix login\nopus 5.5\n" .. IDLE_HINT)
 end)
 
 t.test("the hover card names an omp agent's model as its session does, provider/model, rather than Tern's name", function()
@@ -40,12 +43,12 @@ t.test("the hover card names an omp agent's model as its session does, provider/
 		agents = { agent({ model = "Opus 5.5 \u{F0EB}", route = "anthropic/claude-opus-5-5@bedrock" }) },
 		now = 0,
 	}).view
-	t.eq(visible.hover(view, "Fix login"), ICON .. " Fix login · Idle\nModel anthropic/claude-opus-5-5")
+	t.eq(visible.hover(view, "Fix login"), ICON .. " Idle\nFix login\nanthropic/claude-opus-5-5\n" .. IDLE_HINT)
 end)
 
 t.test("the hover card shows the agent's state and its last message", function()
 	local view = viewModel.build({ agents = { agent({ lastMessage = "Tests pass. **Ready** to merge." }) }, now = 0 }).view
-	t.eq(visible.hover(view, "Fix login"), ICON .. " Fix login · Idle\nTests pass. **Ready** to merge.")
+	t.eq(visible.hover(view, "Fix login"), ICON .. " Idle\nFix login\nTests pass. **Ready** to merge.\n" .. IDLE_HINT)
 end)
 
 local HOME = "/Users/me"

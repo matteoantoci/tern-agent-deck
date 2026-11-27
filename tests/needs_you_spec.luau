@@ -147,7 +147,10 @@ t.test("a card's hover card holds the agent's facts and its last message", funct
 			agent({ pane = 2, title = "ask", state = "waiting_input", activeAt = NOW - 90, model = "Opus", lastMessage = "Go?" }),
 		},
 	}).view
-	t.eq(visible.cardHover(out, ") ask"), "ask · Waiting for you\nModel opus\nGo?")
+	t.eq(
+		visible.cardHover(out, ") ask"),
+		":sparkle Waiting for you 1m\nask\nGo?\nopus\nClick: go to it and answer · Right-click: Pin, Interrupt"
+	)
 end)
 
 t.test("the Live tab shows the waiting mark and how many cards need you, also while Recent is open", function()

@@ -74,7 +74,10 @@ t.test("while omp shows a subagent, its agent keeps the subagent rows and the sh
 		":sparkle(Working) Other 0s",
 	})
 	t.eq(visible.selected(out), { "■(Running) Ticket07 task" })
-	t.eq(visible.hover(out, "Ticket03"), "Ticket03 · Not live\nRole task\nNot updated while omp shows another subagent")
+	t.eq(
+		visible.hover(out, "Ticket03"),
+		"■ Not live\nTicket03\ntask\nNot updated while omp shows another subagent\nClick: show it in omp"
+	)
 	t.eq(visible.state(out, "Ticket03"), "frozen")
 end)
 

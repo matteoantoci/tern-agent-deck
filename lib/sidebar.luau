@@ -151,6 +151,7 @@ local function snapshot(cx: WindowCx): viewModel.Input
 			summarizing = summaries.pending(block.pane, message),
 			repo = repos.of(cwd),
 			sessionFile = file,
+			command = str(block.command),
 			route = file and sessionReader.model(file),
 		})
 	end
