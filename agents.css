@@ -82,8 +82,12 @@
 	transition: color 0.15s var(--ease);
 }
 
-[data-role='agents.root'] [data-role='agents.view']:hover {
+/* Tern's button fill never shows on the switch, on the shown view too: hover only brightens the text. */
+[data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']):is(:hover, :active, :focus) {
 	background: transparent;
+}
+
+[data-role='agents.root'] [data-role='agents.view']:hover {
 	color: var(--t1);
 }
 
