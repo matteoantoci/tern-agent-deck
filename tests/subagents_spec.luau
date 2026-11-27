@@ -206,4 +206,22 @@ t.test("each subagent's time counts from when the reader saw its state begin", f
 	t.eq(subagents.stamp(third, nil, 4000), nil)
 end)
 
+t.test("each subagent keeps the time the reader first saw it while its id stays listed", function()
+	local function seen(subs: any): { string }
+		local out = {}
+		for _, sub in subs.agents do
+			table.insert(out, sub.name .. " " .. tostring(sub.firstSeen))
+		end
+		return out
+	end
+	local first = subagents.stamp(nil, subagents.fromTray(dock({ card("A", "running") })), 1000)
+	t.eq(seen(first), { "A 1000" })
+	local second = subagents.stamp(first, subagents.fromTray(dock({ card("B", "queued"), card("A", "done") })), 2000)
+	t.eq(seen(second), { "B 2000", "A 1000" }, "a listed id keeps its time, a new one gets the clock")
+	local third = subagents.stamp(second, subagents.fromTray(dock({ card("B", "running") })), 3000)
+	t.eq(seen(third), { "B 2000" })
+	local fourth = subagents.stamp(third, subagents.fromTray(dock({ card("A", "running"), card("B", "running") })), 4000)
+	t.eq(seen(fourth), { "A 4000", "B 2000" }, "an id that left the tray starts again")
+end)
+
 return nil

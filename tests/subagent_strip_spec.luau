@@ -376,4 +376,24 @@ t.test("open lines show at most 20 subagents: the failed ones and the newest of 
 	t.eq(bytes < 256 * 1024, true)
 end)
 
+t.test("siblings keep their drawn order when the tray swaps them and their states change", function()
+	local before = view("working", {
+		sub("A", "running", 1, { firstSeen = 100 }),
+		sub("A>X", "running", 2, { parent = "A", firstSeen = 150 }),
+		sub("B", "pending", 1, { firstSeen = 200 }),
+	})
+	local after = view("working", {
+		sub("B", "running", 1, { firstSeen = 200 }),
+		sub("A", "failed", 1, { firstSeen = 100 }),
+		sub("A>X", "running", 2, { parent = "A", firstSeen = 150 }),
+	})
+	t.eq(lineNames(before), { "A", "X", "B" })
+	t.eq(lineNames(after), lineNames(before))
+end)
+
+t.test("siblings first seen at the same time draw in omp id order", function()
+	local out = view("working", { sub("Zed", "running", 1, { firstSeen = 5 }), sub("Amy", "running", 1, { firstSeen = 5 }) })
+	t.eq(lineNames(out), { "Amy", "Zed" })
+end)
+
 return nil

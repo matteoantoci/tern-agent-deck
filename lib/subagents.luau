@@ -38,6 +38,9 @@ export type Subagent = {
 	--- `tern.now()` when its state began, as the reader saw it (`subagents.stamp`): when it started, while it runs
 	--- or is queued; when it ended, once it finished. Nil when the reader saw it only finished.
 	since: number?,
+	--- `tern.now()` when the reader first saw this omp id in its agent's tray (`subagents.stamp`), kept while the id
+	--- stays listed: the view model draws siblings in this order, as omp's tray order can change with their state.
+	firstSeen: number?,
 }
 
 --- The subagents of one agent, in tree order (each one before the subagents it runs); `incomplete` when the node
@@ -258,7 +261,8 @@ end
 
 --- Sets on each subagent of `read` the time its state began (`since`), from `last`, the read before it: a subagent
 --- that still runs, or that had finished already, keeps its time; one that started or finished since `last` gets
---- `clock`; one that `last` did not list and that has finished has no time (its end is not known). Returns `read`.
+--- `clock`; one that `last` did not list and that has finished has no time (its end is not known). Each one also keeps
+--- the time `last` first saw it (`firstSeen`), or gets `clock` when `last` did not list it. Returns `read`.
 function subagents.stamp(last: Subagents?, read: Subagents?, clock: number): Subagents?
 	if read == nil then
 		return nil
@@ -271,6 +275,7 @@ function subagents.stamp(last: Subagents?, read: Subagents?, clock: number): Sub
 	end
 	for _, sub in read.agents do
 		local prev = before[sub.id]
+		sub.firstSeen = (prev and prev.firstSeen) or clock
 		if prev and active(prev) == active(sub) then
 			sub.since = prev.since
 		elseif prev or active(sub) then
