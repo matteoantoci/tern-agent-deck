@@ -254,18 +254,12 @@
 	color: var(--t1);
 }
 
-/* This tab's agent: a light accent fill with a 2px accent bar at the left, around the agent and its subagent lines,
-   or around the closed Older than a day line while the agent sits under it. */
-[data-role='agents.root'] :is([data-role='agents.on.0'], [data-role='agents.mine']) {
+/* This tab's agent: a light accent fill with a 2px accent bar at the left, around the agent's block (its row and its
+   subagent lines), or around the closed Older than a day line while the agent sits under it. */
+[data-role='agents.root'] [data-role='agents.mine'] {
 	border-radius: var(--r-chip);
 	background: rgb(from var(--accent) r g b / 10%);
 	box-shadow: inset 2px 0 0 var(--accent);
-}
-
-[data-role='agents.root'] [data-role='agents.on.0']:hover {
-	box-shadow:
-		inset 2px 0 0 var(--accent),
-		inset 0 0 0 1px var(--l2);
 }
 
 [data-role='agents.root'] [data-role='agents.mine'] > :is([data-role^='agents.on.'], [data-role^='agents.item.']) {
@@ -277,7 +271,7 @@
 	box-shadow: inset 0 0 0 1px var(--l2);
 }
 
-[data-role='agents.root'] :is([data-role='agents.on.0'], [data-role='agents.mine'] > [data-role='agents.item.0']) [data-role='agents.name'] {
+[data-role='agents.root'] [data-role='agents.mine'] > :is([data-role='agents.on.0'], [data-role='agents.item.0']) [data-role='agents.name'] {
 	font-weight: 500;
 }
 

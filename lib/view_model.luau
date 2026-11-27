@@ -1305,19 +1305,30 @@ local function drawnSubs(subs: { subagents.Subagent }, shown: string?, limit: nu
 	return drawn, math.max(0, #candidates - limit)
 end
 
--- The agent's row at `depth`, with the folded subagent strip after its title and the chevron in its time slot, and
--- below it the lines of its subagents in tree order (each one after the one it runs under, siblings in the order the
--- reader first saw them, see `ordered`), one step down per nesting level:
+-- The block that holds an agent's row and the lines below it: one for every agent, so that a fold, an unfold or a
+-- crew that starts or ends is a patch inside the block and the row is sent again under its key. Tern draws a node it
+-- adds a fraction of a point off until the next redraw; a node sent in place of one with the same key is right at
+-- once. This tab's agent's block carries the accent, which `agents.css` draws around the row and its lines.
+local function block(agent: Agent, shared: Shared, lines: { Node }): Node
+	local p: { [string]: any } = { key = "tree-" .. string.format("%.0f", agent.pane), gap = "none" }
+	if shared.focused == agent.pane then
+		p.role = ROLE.mine
+	end
+	return { k = "col", p = p, c = lines }
+end
+
+-- The agent's block (see `block`): its row at `depth`, with the folded subagent strip after its title and the chevron
+-- in its time slot, and below it the lines of its subagents in tree order (each one after the one it runs under,
+-- siblings in the order the reader first saw them, see `ordered`), one step down per nesting level:
 -- every one not finished while the lines are open (`agents.toggle.open`), else only the failed ones (a failure never
 -- hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see `drawnSubs`), then a muted
 -- "+N more" line. A warning line says when Tern cut the read, and one that +N running subagents sit past the levels
 -- omp renders. The lines are open for every agent until the user closes them (`subsClosed`), so that no line moves
 -- when its state, the focus or the subagent omp shows changes. With no toggle (no subagent runs, waits or is queued),
--- nothing can hide the lines that are left. This tab's agent, and its open lines, are one block, which `agents.css`
--- draws with the accent.
+-- nothing can hide the lines that are left.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
-		return row(agent, shared, pinned, depth)
+		return block(agent, shared, { row(agent, shared, pinned, depth) })
 	end
 	local pane = string.format("%.0f", agent.pane)
 	local crew = count(subs)
@@ -1375,14 +1386,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			table.insert(lines, infoLine("subs-incomplete", iconNode("warn", "warning"), text, "warning", depth + 1))
 		end
 	end
-	if #lines == 1 then
-		return main
-	end
-	local p: { [string]: any } = { key = "tree-" .. pane, gap = "none" }
-	if shared.focused == agent.pane then
-		p.role = ROLE.mine
-	end
-	return { k = "col", p = p, c = lines }
+	return block(agent, shared, lines)
 end
 
 -- An idle agent whose last turn ended this long ago (in seconds) folds into "Older than a day", unless it is pinned.
