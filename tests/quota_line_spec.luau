@@ -3,6 +3,7 @@
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
+local quotas = require("../lib/quotas")
 
 local MINUTE, HOUR, DAY = 60, 60 * 60, 24 * 60 * 60
 -- Sunday 29 November 2026, 12:00 UTC (a Sunday in every time zone from UTC-11 to UTC+11), in seconds.
@@ -98,6 +99,31 @@ t.test("a quota without an account name shows the provider and the window only",
 	alone.account = nil
 	local out = view({ alone })
 	t.eq(visible.chrome(out)[2], "■ opencode-go · Monthly 91% · resets Sun")
+end)
+
+-- The quotas the parser reads from `rows` (provider, email, window, limit, used, status), each reset on Sunday.
+local function parsed(rows: { { any } }): { any }
+	local lines: { string } = {}
+	for _, r in rows do
+		table.insert(lines, table.concat({ r[1], r[2], r[3], r[4], tostring(r[5]), r[6], tostring((SUNDAY - 1) * 1000) }, "\t"))
+	end
+	return quotas.parse(table.concat(lines, "\n"), NOW * 1000) :: any
+end
+
+t.test("an account named as its provider shows no name in the line", function()
+	local out = view(parsed({ { "anthropic", "claude@home.it", "5 Hour", "Claude 5 Hour", 1.0, "exhausted" } }))
+	t.eq(visible.chrome(out)[2], "■ Claude · 5h 100% · resets Sun")
+end)
+
+t.test("two accounts named as their provider show their email's domains in the line and the tooltip", function()
+	local out = view(parsed({
+		{ "anthropic", "claude@home.it", "5 Hour", "Claude 5 Hour", 1.0, "exhausted" },
+		{ "anthropic", "claude@work.com", "5 Hour", "Claude 5 Hour", 0.9, "warning" },
+	}))
+	t.eq(visible.chrome(out)[2], "■ Claude · home.it · 5h 100% · resets Sun +1")
+	t.eq(visible.titles(out, "Claude · home.it · 5h 100%"), {
+		"Claude · home.it · 5h 100% · resets Sun\nClaude · work.com · 5h 90% · resets Sun",
+	})
 end)
 
 t.test("a quota whose window reset since the last read shows no line", function()
