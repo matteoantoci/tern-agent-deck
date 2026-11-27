@@ -127,15 +127,19 @@ export type Output = {
 	waiting: { number },
 }
 
--- Color goes only to states that ask for a look: working (accent) and waiting (warning). An idle agent is the resting
--- state, a filled neutral dot. A hollow dot marks a row that is not updated live: an exited pinned agent, a closed
--- session, or a subagent the sidebar cannot read while omp shows another one (it may still run). A working dot
+-- Each state reaches the canvas as data: the role of its dot or icon ends in the state (`agents.dot.working`,
+-- `agents.mark.done`), and `agents.css` gives each state its Tern color: working and running `--live`, waiting `--warn`,
+-- done `--ok`, failed `--bad`, idle `--t3`, exited, stopped and not live `--t4`. No state takes a Tern tone, so the
+-- accent marks only the selected row. A hollow dot marks a row that is not updated live: an exited pinned agent, a
+-- closed session, or a subagent the sidebar cannot read while omp shows another one (it may still run). A working dot
 -- pulses, as the dot of a running subagent in omp's own view does.
-local DOT: { [AgentState]: { tone: string, label: string, hollow: boolean?, pulse: boolean? } } = {
-	working = { tone = "accent", label = "Working", pulse = true },
-	waiting_input = { tone = "warning", label = "Waiting for you" },
-	idle = { tone = "muted", label = "Idle" },
-	exited = { tone = "dim", label = "Exited", hollow = true },
+type State = "working" | "waiting" | "idle" | "exited" | "running" | "done" | "failed" | "stopped" | "frozen"
+
+local DOT: { [AgentState]: { state: State, label: string, hollow: boolean?, pulse: boolean? } } = {
+	working = { state = "working", label = "Working", pulse = true },
+	waiting_input = { state = "waiting", label = "Waiting for you" },
+	idle = { state = "idle", label = "Idle" },
+	exited = { state = "exited", label = "Exited", hollow = true },
 }
 
 -- `text` cut to at most `bytes` bytes at the start of a UTF-8 character, with `…`; whole when it fits.
@@ -294,7 +298,8 @@ local ROLE = {
 	body = "agents.body",
 	chev = "agents.chev",
 	icon = "agents.icon",
-	dot = "agents.dot",
+	dot = "agents.dot.",
+	mark = "agents.mark.",
 	name = "agents.name",
 	detail = "agents.detail",
 	count = "agents.count",
@@ -339,12 +344,17 @@ end
 -- A state dot in the 14 px icon column: filled, or hollow for a row that is not updated live. A live dot takes Tern's
 -- `pulse` effect (opacity 1 → 0.45 over 1.6 s), the look of a running subagent's dot in omp's own view; Tern stops it
 -- under reduced motion and while the pane is hidden.
-local function dotNode(tone: string, label: string, hollow: boolean?, pulse: boolean?): Node
-	local span: { [string]: string } = { t = if hollow then "○" else "●", s = tone }
+local function dotNode(state: State, label: string, hollow: boolean?, pulse: boolean?): Node
+	local span: { [string]: string } = { t = if hollow then "○" else "●" }
 	if pulse then
 		span.fx = "pulse"
 	end
-	return { k = "text", p = { spans = { span }, aria = label, role = ROLE.dot } }
+	return { k = "text", p = { spans = { span }, aria = label, role = ROLE.dot .. state } }
+end
+
+-- An icon in the 14 px icon column that shows a state, in that state's color.
+local function markNode(icon: string, state: State): Node
+	return { k = "icon", p = { name = icon, role = ROLE.mark .. state } }
 end
 
 -- A hover card's facts: an aligned grid of muted labels and their values, as `tern.ui.kv` builds it.
@@ -433,7 +443,7 @@ end
 -- carries the color). A working agent has no end mark: its pulsing dot already says so.
 local function endMark(state: AgentState): Node?
 	if state == "waiting_input" then
-		return { k = "icon", p = { name = "bell", tone = "muted", role = ROLE.status } }
+		return { k = "icon", p = { name = "bell", role = ROLE.status } }
 	end
 	return nil
 end
@@ -446,7 +456,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 	local dot = DOT[agent.state]
 	local shownName = name(agent, shared)
 	local children: { Node } = {
-		dotNode(dot.tone, dot.label, dot.hollow, dot.pulse),
+		dotNode(dot.state, dot.label, dot.hollow, dot.pulse),
 		-- An exited agent shows only while pinned, dimmed.
 		nameNode(shownName, if agent.state == "exited" then "dim" else nil, place ~= nil),
 	}
@@ -644,9 +654,9 @@ local function countNode(count: number, role: string): Node
 	return { k = "text", p = { spans = { { t = tostring(count), s = "muted" } }, wrap = "none", role = role } }
 end
 
--- A section head (Needs you, Pinned): its icon, its label and the count of its rows. It takes no click.
-local function head(icon: string, tone: string, label: string, count: number): Node
-	local children: { Node } = { iconNode(icon, tone), nameNode(label), countNode(count, ROLE.meta) }
+-- A section head (Needs you): its state icon, its label and the count of its rows. It takes no click.
+local function head(icon: string, state: State, label: string, count: number): Node
+	local children: { Node } = { markNode(icon, state), nameNode(label), countNode(count, ROLE.meta) }
 	return { k = "row", p = { key = "head", gap = "sm", role = rowRole("head", 0) }, c = children }
 end
 
@@ -791,9 +801,9 @@ local function subRow(
 		local parents = string.split(parent, ">")
 		table.insert(detail, "in " .. parents[#parents])
 	end
-	local state = if frozen then "Not live" elseif sub.waiting then "Waiting on its subagents" else "Running"
-	local children: { Node } =
-		{ dotNode(if frozen then "dim" else "accent", state, frozen, not frozen), nameNode(own, nil, #detail > 0) }
+	local label = if frozen then "Not live" elseif sub.waiting then "Waiting on its subagents" else "Running"
+	local dotState: State = if frozen then "frozen" elseif sub.waiting then "waiting" else "running"
+	local children: { Node } = { dotNode(dotState, label, frozen, not frozen), nameNode(own, nil, #detail > 0) }
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
 	end
@@ -831,21 +841,21 @@ local function subRow(
 				click = "subagent=" .. pane .. " " .. sub.id,
 				menu = copyItems(file, if agentFile then "The subagent's name is no omp id" else NO_SESSION_FILE),
 			},
-			hovercard = card(cardHead(own, state), facts, rest),
+			hovercard = card(cardHead(own, label), facts, rest),
 		},
 		c = children,
 	}
 end
 
 -- A line under the subagents that says something about them and takes no click: the finished count, the cut read.
-local function infoLine(key: string, icon: string, tone: string, text: string, style: string, depth: number): Node
-	local children: { Node } = { iconNode(icon, tone), nameNode(text, style) }
+local function infoLine(key: string, icon: Node, text: string, style: string, depth: number): Node
+	local children: { Node } = { icon, nameNode(text, style) }
 	return { k = "row", p = { key = key, gap = "sm", role = rowRole("info", depth) }, c = children }
 end
 
 -- The line that counts the finished subagents by result, as "2 subagents done, 1 failed, 1 stopped". The worst result
--- sets the icon: a red cross for a failure, else a muted check for a stop, else a green check, as omp's job tile draws a
--- finished job. Nil when none finished.
+-- sets the icon and its state: a cross for a failure, else a check for a stop or for all done, as omp's job tile draws
+-- a finished job. Nil when none finished.
 local function finishedLine(done: number, failed: number, stopped: number, depth: number): Node?
 	local counts = { { n = done, word = "done" }, { n = failed, word = "failed" }, { n = stopped, word = "stopped" } }
 	local parts: { string } = {}
@@ -858,13 +868,13 @@ local function finishedLine(done: number, failed: number, stopped: number, depth
 	if #parts == 0 then
 		return nil
 	end
-	local icon, tone = "check", "success"
+	local icon, state: State = "check", "done"
 	if failed > 0 then
-		icon, tone = "x", "error"
+		icon, state = "x", "failed"
 	elseif stopped > 0 then
-		tone = "muted"
+		state = "stopped"
 	end
-	return infoLine("subs-done", icon, tone, table.concat(parts, ", "), "muted", depth)
+	return infoLine("subs-done", markNode(icon, state), table.concat(parts, ", "), "muted", depth)
 end
 
 -- Whether any of `subs` runs: omp runs `task` subagents in the background, so they can outlive their agent's turn.
@@ -912,7 +922,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	end
 	if deeper > 0 then
 		local text = string.format("+%d deeper", deeper)
-		table.insert(lines, infoLine("subs-deeper", "more", "muted", text, "muted", depth + 1))
+		table.insert(lines, infoLine("subs-deeper", iconNode("more", "muted"), text, "muted", depth + 1))
 	end
 	local finished = finishedLine(done, failed, stopped, depth + 1)
 	if finished then
@@ -920,7 +930,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	end
 	if subs.incomplete then
 		local text = "subagents may be incomplete"
-		table.insert(lines, infoLine("subs-incomplete", "warn", "warning", text, "warning", depth + 1))
+		table.insert(lines, infoLine("subs-incomplete", iconNode("warn", "warning"), text, "warning", depth + 1))
 	end
 	if #lines == 1 then
 		return main
@@ -1050,7 +1060,7 @@ end
 -- A closed session at `depth`: a hollow dot, its title with omp's icon (or "Untitled") and, at the right end, how
 -- long ago it was last written. A click resumes it in a new tab; a right-click copies its ID or path.
 local function sessionRow(session: Session, time: number?, depth: number): Node
-	local children: { Node } = { dotNode("dim", "Closed", true), nameNode(shownTitle(session.title) or "Untitled") }
+	local children: { Node } = { dotNode("exited", "Closed", true), nameNode(shownTitle(session.title) or "Untitled") }
 	if time then
 		local age = ago(math.max(0, time - session.at))
 		table.insert(children, { k = "text", p = { spans = { { t = age, s = "muted" } }, wrap = "none", role = ROLE.meta } })
@@ -1384,7 +1394,7 @@ local function liveBody(input: Input, shared: Shared): { Node }
 		table.insert(strip, row(agent, shared, false, 1, place))
 	end
 	if #strip > 0 then
-		table.insert(strip, 1, head("bell", "warning", "Needs you", #strip))
+		table.insert(strip, 1, head("bell", "waiting", "Needs you", #strip))
 		table.insert(children, { k = "col", p = { key = "needs-you", gap = "none" }, c = strip })
 	end
 	local folded = input.folded or {}

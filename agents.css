@@ -230,12 +230,12 @@
 	height: 10px;
 }
 
-:is([data-role='agents.icon'], [data-role='agents.dot'], [data-role='agents.glyph']) svg {
+:is([data-role='agents.icon'], [data-role^='agents.mark.'], [data-role^='agents.dot.'], [data-role='agents.glyph']) svg {
 	width: 14px;
 	height: 14px;
 }
 
-[data-role='agents.icon'] {
+:is([data-role='agents.icon'], [data-role^='agents.mark.']) {
 	flex: none;
 	display: grid;
 	place-items: center;
@@ -245,7 +245,7 @@
 
 /* The state dot is a `●`/`○` glyph at 9px, the size of a job's dot in omp's own view (`omp.job.tile.dot`), in a 10px
    box: the Files tree's chevron slot, no wider. */
-[data-role='agents.dot'] {
+[data-role^='agents.dot.'] {
 	flex: none;
 	display: grid;
 	place-items: center;
@@ -253,6 +253,32 @@
 	height: 14px;
 	font-size: 9px;
 	line-height: 1;
+}
+
+/* Each state's color, by the state at the end of the role of its dot (`agents.dot.<state>`) or icon
+   (`agents.mark.<state>`). States take Tern's tokens, not its tones: the accent marks only the selected row. */
+:is([data-role='agents.dot.working'], [data-role='agents.dot.running']) {
+	color: var(--live);
+}
+
+:is([data-role='agents.dot.waiting'], [data-role='agents.mark.waiting']) {
+	color: var(--warn);
+}
+
+[data-role='agents.mark.done'] {
+	color: var(--ok);
+}
+
+[data-role='agents.mark.failed'] {
+	color: var(--bad);
+}
+
+[data-role='agents.dot.idle'] {
+	color: var(--t3);
+}
+
+:is([data-role='agents.dot.exited'], [data-role='agents.dot.frozen'], [data-role='agents.mark.stopped']) {
+	color: var(--t4);
 }
 
 :is([data-role='agents.name'], [data-role='agents.detail']) {
@@ -271,8 +297,10 @@
 	font-weight: 400;
 }
 
+/* The bell at the end of a waiting agent's row is neutral: its state dot carries the color. */
 [data-role='agents.status'] {
 	flex: none;
+	color: var(--t3);
 }
 
 /* Counts in the Files pane's small mono digits. A folder row's count and its `+` show while the pointer is on it. */

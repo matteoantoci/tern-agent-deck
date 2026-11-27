@@ -274,7 +274,7 @@ end
 local function dotPulses(row: Node): boolean
 	for _, child in kids(row) do
 		local p = props(child)
-		if p.role == "agents.dot" and type(p.spans) == "table" then
+		if string.match(tostring(p.role), "^agents%.dot%.") and type(p.spans) == "table" then
 			for _, span in p.spans do
 				if type(span) == "table" and span.fx == "pulse" then
 					return true
@@ -346,14 +346,66 @@ function visible.click(view: Node, text: string): string?
 	return actions and actions.click
 end
 
---- The tone of the first icon in the row that shows `text` (`success`, `error`, `muted`, …), or nil.
-function visible.iconTone(view: Node, text: string): string?
+-- The state that `role` carries (`agents.dot.<state>` for a state dot, `agents.mark.<state>` for a state icon), or nil.
+local function stateOf(role: any): string?
+	if type(role) ~= "string" then
+		return nil
+	end
+	return string.match(role, "^agents%.dot%.(%a+)$") or string.match(role, "^agents%.mark%.(%a+)$")
+end
+
+--- The state of the first state dot or state icon in the row that shows `text` (`working`, `done`, …), or nil.
+function visible.state(view: Node, text: string): string?
 	for _, child in kids(findRow(view, text)) do
-		if child.k == "icon" then
-			return props(child).tone
+		local state = stateOf(props(child).role)
+		if state then
+			return state
 		end
 	end
 	return nil
+end
+
+--- Each row that has a state dot or state icon, as `<state>: <row line>`, in order.
+function visible.states(view: Node): { string }
+	local out: { string } = {}
+	for _, row in rowNodes(view) do
+		for _, child in kids(row) do
+			local state = stateOf(props(child).role)
+			if state then
+				table.insert(out, state .. ": " .. line(row))
+				break
+			end
+		end
+	end
+	return out
+end
+
+-- Collects into `out` each color a state dot, state icon or end mark in `n` takes from Tern: a `tone`, or a span style.
+local function collectStateColors(n: Node, out: { string })
+	local p = props(n)
+	if stateOf(p.role) or p.role == "agents.status" then
+		if p.tone then
+			table.insert(out, p.role .. " tone=" .. tostring(p.tone))
+		end
+		if type(p.spans) == "table" then
+			for _, span in p.spans do
+				if type(span) == "table" and span.s then
+					table.insert(out, p.role .. " s=" .. tostring(span.s))
+				end
+			end
+		end
+	end
+	for _, child in kids(n) do
+		collectStateColors(child, out)
+	end
+end
+
+--- Every Tern color (a tone or a span style) on a state dot, state icon or end mark in `view`: empty when each state
+--- gets its color from `agents.css` only.
+function visible.stateColors(view: Node): { string }
+	local out: { string } = {}
+	collectStateColors(view, out)
+	return out
 end
 
 --- The action a click on the first button in the row that shows `text` sends, or nil when it has no button.
