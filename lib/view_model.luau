@@ -1003,19 +1003,29 @@ local SUB_STATE: { [string]: { state: State, label: string } } = {
 	aborted = { state = "stopped", label = "Stopped" },
 }
 
--- Whether a subagent runs or waits in the queue: only those take a bar of the strip.
-local function runs(sub: subagents.Subagent): boolean
-	return sub.status == "running" or sub.status == "pending"
+-- The question of a subagent that asks the user: omp's tray names its current call as the tool's verb and what the
+-- call acts on, so a running subagent inside the `ask` tool shows `Ask <question>`. Nil for any other subagent; an
+-- empty string when the call shows no question.
+local function asks(sub: subagents.Subagent): string?
+	if sub.status ~= "running" or type(sub.intent) ~= "string" then
+		return nil
+	end
+	local intent = sub.intent :: string
+	if intent == "Ask" then
+		return ""
+	end
+	return string.match(intent, "^Ask%s+(.*)$")
 end
 
--- What a subagent line shows as a state: a subagent that only waits on its own subagents, or one whose state is the
--- last one read while omp shows another subagent, says so.
+-- What a subagent line shows as a state: a subagent that asks the user waits (omp's `waiting` flag, a wait on its
+-- own job or subagent, still counts as running), and one whose state is the last one read while omp shows another
+-- subagent says so.
 local function subShown(sub: subagents.Subagent, frozen: boolean): { state: State, label: string }
 	if frozen then
 		return { state = "frozen", label = "Not live" }
 	end
-	if sub.waiting and runs(sub) then
-		return { state = "waiting", label = "Waiting on its subagents" }
+	if asks(sub) then
+		return { state = "waiting", label = "Waiting for you" }
 	end
 	return SUB_STATE[sub.status] or { state = "idle", label = "Queued" }
 end
@@ -1122,7 +1132,7 @@ local function count(subs: subagents.Subagents): Crew
 	local crew: Crew = { running = 0, waiting = 0, queued = 0, done = 0, failed = 0, stopped = 0 }
 	for _, sub in subs.agents do
 		if sub.status == "running" then
-			if sub.waiting then
+			if asks(sub) then
 				crew.waiting += 1
 			else
 				crew.running += 1
@@ -1787,20 +1797,6 @@ local function waitOrder(agents: { Agent }): { Agent }
 		return a.pane < b.pane
 	end)
 	return waiting
-end
-
--- The question of a subagent that asks the user: omp's tray names its current call as the tool's verb and what the
--- call acts on, so a running subagent inside the `ask` tool shows `Ask <question>`. Nil for any other subagent; an
--- empty string when the call shows no question.
-local function asks(sub: subagents.Subagent): string?
-	if sub.status ~= "running" or type(sub.intent) ~= "string" then
-		return nil
-	end
-	local intent = sub.intent :: string
-	if intent == "Ask" then
-		return ""
-	end
-	return string.match(intent, "^Ask%s+(.*)$")
 end
 
 -- One Needs you card: how long its agent or subagent has waited, in seconds, and its node.

@@ -5,7 +5,7 @@
 -- woke it) shows as running. Tern draws the tray while its "agents tray" setting is on (the default); omp then hides
 -- its HUD counter.
 -- A card carries the agent's omp id (`ref`): name-based, a `.` between nesting levels (`Anna.Bob`), so the id gives the
--- depth and the parent. Its status, whether it only waits on its own subagents (`waiting`), its accessible name
+-- depth and the parent. Its status, whether it waits on its own background job or subagent (`waiting`, still at work), its accessible name
 -- (`aria`: name, type, status, what it does, its tool count) and, as children, its model with the thinking level
 -- (`omp.tray.model`: `claude-opus-5-5 · high`) and what it does now (`omp.tray.call`).
 -- Checked live 2026-11-27 (omp 19.2.1, Tern 0.9.36).
@@ -33,7 +33,7 @@ export type Subagent = {
 	effort: string?,
 	--- What it does now: its current call's intent, or its last line.
 	intent: string?,
-	--- Running, but only waiting on its own subagents.
+	--- Running and waiting on its own background job or subagent: omp still counts it as at work.
 	waiting: boolean?,
 	--- `tern.now()` when its state began, as the reader saw it (`subagents.stamp`): when it started, while it runs
 	--- or is queued; when it ended, once it finished. Nil when the reader saw it only finished.

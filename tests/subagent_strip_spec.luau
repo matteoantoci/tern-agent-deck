@@ -51,7 +51,7 @@ local function lineNames(out: any): { string }
 	return names
 end
 
-t.test("the strip shows one bar per running subagent at every level; waiting, queued and finished ones get none", function()
+t.test("the strip shows one bar per running subagent at every level, one that waits on its own job too; asking, queued and finished ones get none", function()
 	local out = view("working", {
 		sub("A", "running"),
 		sub("A>B", "running", 2, { parent = "A" }),
@@ -59,9 +59,10 @@ t.test("the strip shows one bar per running subagent at every level; waiting, qu
 		sub("D", "aborted"),
 		sub("E", "running", 1, { waiting = true }),
 		sub("F", "pending"),
+		sub("G", "running", 1, { intent = "Ask Which one?" }),
 	}, { closed = CLOSED })
-	t.eq(visible.agentRows(out), { ":terminal(Working) Lead [▮ ▮] 0s" })
-	t.eq(visible.bars(out, "Lead"), { "running", "running" })
+	t.eq(visible.agentRows(out), { "■(Waiting for you) G in Lead", ":terminal(Working) Lead [▮ ▮ ▮] 0s" })
+	t.eq(visible.bars(out, ") Lead"), { "running", "running", "running" })
 end)
 
 t.test("the strip shows at most 8 bars, then +N", function()
@@ -85,12 +86,12 @@ t.test("an agent whose subagents all finished has no strip and no toggle; a fail
 end)
 
 t.test("an agent with subagents that wait or are queued but none running shows N subagents in the strip's place", function()
-	local queued = view("working", { sub("A", "pending"), sub("B", "running", 1, { waiting = true }), sub("C", "done") }, {
+	local queued = view("working", { sub("A", "pending"), sub("B", "running", 1, { intent = "Ask Which one?" }), sub("C", "done") }, {
 		closed = CLOSED,
 	})
-	t.eq(visible.agentRows(queued), { ":terminal(Working) Lead [2 subagents] 0s" })
-	t.eq(visible.bars(queued, "Lead"), {})
-	t.eq(visible.button(queued, "Lead"), "subs=7 open")
+	t.eq(visible.agentRows(queued), { "■(Waiting for you) B in Lead", ":terminal(Working) Lead [2 subagents] 0s" })
+	t.eq(visible.bars(queued, ") Lead"), {})
+	t.eq(visible.button(queued, ") Lead"), "subs=7 open")
 	t.eq(visible.agentRows(view("working", { sub("A", "pending") }, { closed = CLOSED }))[1], ":terminal(Working) Lead [1 subagent] 0s")
 end)
 
@@ -108,13 +109,13 @@ t.test("the strip's tooltip lists every count and what a click does", function()
 	local subs = {
 		sub("A", "running"),
 		sub("B", "running"),
-		sub("C", "running"),
-		sub("D", "running", 1, { waiting = true }),
+		sub("C", "running", 1, { waiting = true, intent = "Wait" }),
+		sub("D", "running", 1, { intent = "Ask Which one?" }),
 		sub("E", "done"),
 		sub("F", "failed"),
 	}
-	t.eq(visible.titles(view("working", subs, { closed = CLOSED }), "Lead"), { "3 running · 1 waiting · 1 done · 1 failed. Click: show them" })
-	t.eq(visible.titles(view("working", subs), "Lead"), {
+	t.eq(visible.titles(view("working", subs, { closed = CLOSED }), ") Lead"), { "3 running · 1 waiting · 1 done · 1 failed. Click: show them" })
+	t.eq(visible.titles(view("working", subs), ") Lead"), {
 		"3 running · 1 waiting · 1 done · 1 failed. Click: hide them",
 	})
 	t.eq(visible.titles(view("idle", { sub("A", "pending"), sub("B", "done"), sub("C", "aborted") }, { closed = CLOSED }), "Lead"), {
@@ -240,15 +241,19 @@ t.test("each subagent line's square carries its state", function()
 	t.eq(visible.states(view("working", {
 		sub("A", "running"),
 		sub("B", "running", 1, { waiting = true }),
+		sub("G", "running", 1, { intent = "Ask Which one?" }),
 		sub("C", "pending"),
 		sub("D", "done"),
 		sub("E", "failed"),
 		sub("F", "aborted"),
 	})), {
+		"waiting: ■ Needs you 1",
+		"waiting: ■(Waiting for you) G in Lead",
 		"working: ■ Working 1 busy",
-		"working: :terminal(Working) Lead [▮] 0s",
+		"working: :terminal(Working) Lead [▮ ▮] 0s",
 		"running: ■(Running) A",
-		"waiting: ■(Waiting on its subagents) B",
+		"running: ■(Running) B",
+		"waiting: ■(Waiting for you) G Ask Which one?",
 		"idle: ■(Queued) C",
 		"failed: ■(Failed) E failed",
 	})

@@ -98,6 +98,7 @@ t.test("a subagent that asks the user is a card named after itself in its agent,
 				agents = {
 					sub("Anna", "Ask Which database should I use?", 120),
 					sub("Bob", "Edit view.luau", 300),
+					sub("Dan", "Wait", 30, { waiting = true }),
 					sub("Cleo", "Ask Done?", 60, { status = "done" }),
 				},
 				incomplete = false,
@@ -109,6 +110,8 @@ t.test("a subagent that asks the user is a card named after itself in its agent,
 		"■(Waiting for you) Anna in Lead 2m | Which database should I use? | tern-agents · tab 3 · task",
 	})
 	t.eq(visible.cardStates(out, "Anna"), { "waiting", "waiting" })
+	-- omp's `waiting` flag (a wait on its own job or subagent) is no question for the user.
+	t.eq(visible.state(out, ") Dan"), "running")
 end)
 
 t.test("Needs you orders the cards of agents and subagents by wait time, longest first", function()
