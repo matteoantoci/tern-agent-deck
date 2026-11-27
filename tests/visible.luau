@@ -388,7 +388,7 @@ end
 -- The state that `role` carries (`agents.glyph.<state>` for a title icon, `agents.square.<state>` for a zone head's
 -- or a subagent line's square, `agents.dot.<state>` for a closed session's dot, `agents.bar.<state>` for a bar of the
 -- subagent strip), or nil.
-local STATE_PARTS = { glyph = true, square = true, dot = true, bar = true }
+local STATE_PARTS = { glyph = true, square = true, dot = true, bar = true, time = true }
 
 local function stateOf(role: any): string?
 	if type(role) ~= "string" then
@@ -577,6 +577,109 @@ function visible.secondary(view: Node, text: string): boolean
 		end
 	end
 	return false
+end
+
+-- A Needs you card: a block that takes a click as a whole and is no row.
+local CARD = "agents.card"
+
+local function cardNodes(view: Node): { Node }
+	local out: { Node } = {}
+	local function walk(n: Node)
+		if props(n).role == CARD then
+			table.insert(out, n)
+			return
+		end
+		for _, child in kids(n) do
+			walk(child)
+		end
+	end
+	walk(view)
+	return out
+end
+
+-- A card as one line: its parts (head, question, footer) each as `rows` writes a row, joined by " | ".
+local function cardLine(card: Node): string
+	local parts: { string } = {}
+	for _, child in kids(card) do
+		table.insert(parts, line(child))
+	end
+	return table.concat(parts, " | ")
+end
+
+--- The Needs you cards, in order, each as one line: head, question and footer joined by " | ".
+function visible.cards(view: Node): { string }
+	local out: { string } = {}
+	for _, card in cardNodes(view) do
+		table.insert(out, cardLine(card))
+	end
+	return out
+end
+
+local function findCard(view: Node, text: string): Node
+	for _, card in cardNodes(view) do
+		if string.find(cardLine(card), text, 1, true) then
+			return card
+		end
+	end
+	error("no card shows " .. string.format("%q", text), 3)
+end
+
+--- The action a click anywhere on the card that shows `text` sends, or nil.
+function visible.cardClick(view: Node, text: string): string?
+	local actions = props(findCard(view, text)).actions
+	return actions and actions.click
+end
+
+--- Whether the card that shows `text` holds a button (a card takes its click as a whole, with no button).
+function visible.cardHasButton(view: Node, text: string): boolean
+	return visible.find(findCard(view, text), "button") ~= nil
+end
+
+--- The face of the footer of the card that shows `text`: "sans" or "mono".
+function visible.cardFooterFace(view: Node, text: string): string
+	local parts = kids(findCard(view, text))
+	return if monoSpans(props(parts[#parts]).spans) then "mono" else "sans"
+end
+
+--- What a right-click on the card that shows `text` offers, one line per item, as `menu` reads a row's.
+function visible.cardMenu(view: Node, text: string): { string }
+	local actions = props(findCard(view, text)).actions
+	return menuLines((actions and actions.menu or {}) :: { any })
+end
+
+--- The state of each state part (title icon, square, wait time) in the card that shows `text`, in order.
+function visible.cardStates(view: Node, text: string): { string }
+	local out: { string } = {}
+	local function walk(n: Node)
+		local state = stateOf(props(n).role)
+		if state then
+			table.insert(out, state)
+		end
+		for _, child in kids(n) do
+			walk(child)
+		end
+	end
+	walk(findCard(view, text))
+	return out
+end
+
+--- What the hover card of the card that shows `text` holds, as `hover` reads a row's.
+function visible.cardHover(view: Node, text: string): string?
+	local card = props(findCard(view, text)).hovercard
+	if card == nil then
+		return nil
+	end
+	local out: { string } = {}
+	for _, child in kids(card) do
+		if child.k == "kv" then
+			for _, item in props(child).items or {} do
+				table.insert(out, spanText(item.k) .. " " .. spanText(item.v))
+			end
+		else
+			table.insert(out, line(child))
+		end
+	end
+	return table.concat(out, "\n")
 end
 
 return visible

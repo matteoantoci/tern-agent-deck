@@ -351,6 +351,12 @@ local ROLE = {
 	bar = "agents.bar.",
 	--- The strip's "+N", for the running subagents past the last bar.
 	more = "agents.more",
+	--- A Needs you card (`agents.card`), its question (clamped to 2 lines) and its mono footer.
+	card = "agents.card",
+	question = "agents.question",
+	footer = "agents.footer",
+	--- The number of Needs you cards after the Live switch.
+	needs = "agents.needs",
 }
 
 -- A list row's kind: `item` (a clickable row: an agent, a subagent, a session, "N more"), `on` (this tab's agent's
@@ -1036,11 +1042,15 @@ local function crewText(crew: Crew): string
 end
 
 -- The strip at the end of an agent's row, when the agent has subagents: one bar in the working color per running
--- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place. A click shows or
--- hides the subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and says what a
--- click does, so that a failure is one hover away also while the lines are closed.
-local function stripNode(pane: string, crew: Crew, open: boolean): Node
+-- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place; with none
+-- running and none done, no strip. A click shows or hides the subagent lines (`subs=<pane> open` or
+-- `subs=<pane> closed`); the tooltip lists every count and says what a click does, so that a failure is one hover
+-- away also while the lines are closed.
+local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local running = crew.running
+	if running == 0 and crew.done == 0 then
+		return nil
+	end
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
@@ -1082,7 +1092,10 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local open = if chosen ~= nil then chosen else shared.focused == agent.pane
 	-- The strip goes right after the name, before the time.
 	local children = main.c :: { Node }
-	table.insert(children, 3, stripNode(pane, crew, open))
+	local strip = stripNode(pane, crew, open)
+	if strip then
+		table.insert(children, 3, strip)
+	end
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
@@ -1483,6 +1496,117 @@ local function waitOrder(agents: { Agent }): { Agent }
 	return waiting
 end
 
+-- The question of a subagent that asks the user: omp's tray names its current call as the tool's verb and what the
+-- call acts on, so a running subagent inside the `ask` tool shows `Ask <question>`. Nil for any other subagent; an
+-- empty string when the call shows no question.
+local function asks(sub: subagents.Subagent): string?
+	if sub.status ~= "running" or type(sub.intent) ~= "string" then
+		return nil
+	end
+	local intent = sub.intent :: string
+	if intent == "Ask" then
+		return ""
+	end
+	return string.match(intent, "^Ask%s+(.*)$")
+end
+
+-- One Needs you card: how long its agent or subagent has waited, in seconds, and its node.
+type NeedsCard = { seconds: number, node: Node }
+
+-- A card's footer, in the mono face: the project (the repo, or the folder outside a repo), the tab and, for a
+-- subagent, its type; each part left out when unknown. Nil when no part is known.
+local function cardFooter(agent: Agent, role: string?): Node?
+	local parts: { string } = {}
+	local project = folderTail(folderOf(agent))
+	if project then
+		table.insert(parts, project)
+	end
+	if agent.tab then
+		table.insert(parts, string.format("tab %.0f", agent.tab))
+	end
+	if role then
+		table.insert(parts, role)
+	end
+	if #parts == 0 then
+		return nil
+	end
+	return { k = "text", p = { spans = { { t = table.concat(parts, " · "), s = "mono" } }, role = ROLE.footer, wrap = "none" } }
+end
+
+-- A Needs you card: its head (the title icon or square in the waiting color, the title and the wait time in the
+-- waiting color), the question (`agents.css` clamps it to 2 lines), and the footer. The card takes the click, the
+-- right-click menu and the hover card of the row it stands for, so it holds no button.
+local function needsCard(key: string, icon: Node, title: string, seconds: number?, question: string?, footer: Node?, from: Node): Node
+	local head: { Node } = { icon, nameNode(title) }
+	if seconds then
+		table.insert(head, { k = "text", p = { text = duration(seconds), wrap = "none", role = ROLE.time .. ".waiting" } })
+	end
+	local children: { Node } = { { k = "row", p = { key = "head", gap = "sm" }, c = head } }
+	if question then
+		table.insert(children, { k = "text", p = { key = "question", text = clip(question, SUMMARY_FROM), role = ROLE.question } })
+	end
+	if footer then
+		table.insert(children, footer)
+	end
+	local p = from.p :: { [string]: any }
+	return {
+		k = "col",
+		p = { key = key, role = ROLE.card, gap = "xs", actions = p.actions, hovercard = p.hovercard },
+		c = children,
+	}
+end
+
+-- The Needs you cards, the one that has waited longest first: one per waiting agent (pinned ones too), and one per
+-- subagent of a live agent that asks the user, named after itself "in <agent title>". omp gives no start for a
+-- subagent's wait, so its card counts from the start of its run.
+local function needsCards(input: Input, shared: Shared): { NeedsCard }
+	local pinned: { [number]: boolean } = {}
+	for _, agent in matchPins(input.agents, input.pins or {}) do
+		pinned[agent.pane] = true
+	end
+	local cards: { NeedsCard } = {}
+	for _, agent in waitOrder(input.agents) do
+		local shown = shownState(agent, shared)
+		local pane = string.format("%.0f", agent.pane)
+		local from = row(agent, shared, pinned[agent.pane] == true, 0)
+		local icon = titleIcon(agent.title, "waiting", shown.label)
+		local node = needsCard("need-" .. pane, icon, rowTitle(agent, shared), shown.seconds, nonEmpty(agent.lastMessage), cardFooter(agent), from)
+		table.insert(cards, { seconds = shown.seconds or 0, node = node })
+	end
+	local subs = input.subagents or {}
+	for _, agent in startOrder(input.agents) do
+		local crew = subs[agent.pane]
+		if crew and agent.state ~= "exited" then
+			local pane = string.format("%.0f", agent.pane)
+			for _, sub in crew.agents do
+				local question = asks(sub)
+				if question then
+					local levels = string.split(sub.name, ">")
+					local title = levels[#levels] .. " in " .. rowTitle(agent, shared)
+					local seconds = subSeconds(sub, shared.now)
+					local from = subLine(sub, pane, agent.sessionFile, 0, false, false, shared)
+					local icon = squareNode("waiting", "Waiting for you")
+					local key = "need-" .. pane .. "-" .. keyPart(sub.id)
+					local node = needsCard(key, icon, title, seconds, nonEmpty(question), cardFooter(agent, nonEmpty(sub.role)), from)
+					table.insert(cards, { seconds = seconds or 0, node = node })
+				end
+			end
+		end
+	end
+	-- A stable sort: equal waits keep the order above.
+	local order: { [NeedsCard]: number } = {}
+	for i, card in cards do
+		order[card] = i
+	end
+	table.sort(cards, function(a, b)
+		if a.seconds ~= b.seconds then
+			return a.seconds > b.seconds
+		end
+		return order[a] < order[b]
+	end)
+	return cards
+end
+
 -- The action a click on the status segment runs: the "Next waiting agent" command of the plugin `plugin` (Tern names
 -- a plugin command `plugin.<plugin id>.<command id>`).
 local function nextWaiting(plugin: string?): string?
@@ -1567,22 +1691,21 @@ local function viewButton(label: string, view: View, shown: View): Node
 	}
 end
 
--- A quota as one line: `Claude · work · 7d 97% · resets Sun`. The reset reads as a weekday when a day or more away,
--- else as the time left (`resets in 38m`).
-local function quotaText(quota: Quota, left: number): string
+-- A quota as one line, in two parts: `Claude · work · 7d Fable 97%` and its reset, `· resets Sun`. The reset reads as
+-- a weekday when a day or more away, else as the time left (`resets in 38m`).
+local function quotaText(quota: Quota, left: number): (string, string)
 	local parts = { quota.provider }
 	if quota.account then
 		table.insert(parts, quota.account)
 	end
 	table.insert(parts, string.format("%s %d%%", quota.label, math.round(quota.used * 100)))
 	local reset = if left >= DAY then os.date("%a", quota.resetsAt // 1000) else "in " .. duration(left)
-	table.insert(parts, "resets " .. reset)
-	return table.concat(parts, " · ")
+	return table.concat(parts, " · "), "· resets " .. reset
 end
 
 -- The quota line under the Live/Recent switch: the worst quota near or at its limit (exhausted before warning, then
 -- the higher use) after a square in the warning or the error color, "+N" for the others, and all of them in the
--- tooltip; nil while every quota is fine.
+-- tooltip; nil while every quota is fine. When the line is too narrow, its reset is the part cut first.
 local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	if not time then
 		return nil
@@ -1593,12 +1716,15 @@ local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	end
 	local lines: { string } = {}
 	for _, entry in hot do
-		table.insert(lines, quotaText(entry.quota, entry.left))
+		local main, reset = quotaText(entry.quota, entry.left)
+		table.insert(lines, main .. " " .. reset)
 	end
-	local worst = hot[1].quota
+	local worst = hot[1]
+	local main, reset = quotaText(worst.quota, worst.left)
 	local parts: { Node } = {
-		squareNode(if worst.status == "exhausted" then "failed" else "waiting"),
-		nameNode(lines[1]),
+		squareNode(if worst.quota.status == "exhausted" then "failed" else "waiting"),
+		nameNode(main, nil, true),
+		detailNode(reset),
 	}
 	if #hot > 1 then
 		table.insert(parts, { k = "text", p = { text = "+" .. tostring(#hot - 1), wrap = "none", role = ROLE.meta } })
@@ -1610,10 +1736,17 @@ local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	}
 end
 
--- The head: the Live/Recent switch, and under it the quota line while a quota is near or at its limit. What the old
--- ⋯ menu did stays in the palette commands.
-local function chrome(view: View, input: Input): Node
-	local views: { Node } = { viewButton("Live", "live", view), viewButton("Recent", "recent", view) }
+-- The head: the Live/Recent switch, with the waiting mark and the number of Needs you cards after Live while any
+-- shows (in both views), and under it the quota line while a quota is near or at its limit. What the old ⋯ menu did
+-- stays in the palette commands.
+local function chrome(view: View, input: Input, needs: number): Node
+	local views: { Node } = { viewButton("Live", "live", view) }
+	if needs > 0 then
+		local label = tostring(needs) .. " need you"
+		table.insert(views, squareNode("waiting", label))
+		table.insert(views, { k = "text", p = { text = tostring(needs), wrap = "none", role = ROLE.needs } })
+	end
+	table.insert(views, viewButton("Recent", "recent", view))
 	local children: { Node } = { { k = "row", p = { key = "views", role = ROLE.views, gap = "none" }, c = views } }
 	local quota = quotaLine(input.quotas, input.time)
 	if quota then
@@ -1680,14 +1813,14 @@ local function projectGroups(
 	return out
 end
 
--- The Live view: the zones Needs you (the waiting agents, the one that has waited longest first), Working and Idle,
+-- The Live view: the zones Needs you (`cards`, the one that has waited longest first), Working and Idle,
 -- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, in one project
 -- order for every zone: this tab's project first, then by name. Inside a project, this tab's agent comes first, then
 -- the pinned agents in pin order, then the others: in Working, the longest turn first; in Idle, the newest turn
 -- first and the stopped pins last. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended
 -- a day ago or more, but for the pinned ones and this tab's, fold under "Older than a day". A calm line shows while
 -- no zone does.
-local function liveBody(input: Input, shared: Shared): { Node }
+local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { Node }
 	local subs = input.subagents or {}
 	local pins: { Pin } = input.pins or {}
 	local matched = matchPins(input.agents, pins)
@@ -1698,7 +1831,6 @@ local function liveBody(input: Input, shared: Shared): { Node }
 		pinIndex[agent] = i
 	end
 
-	local waiting: { Agent } = {}
 	local working: { Agent } = {}
 	local idle: { Agent } = {}
 	local older: { Agent } = {}
@@ -1706,9 +1838,7 @@ local function liveBody(input: Input, shared: Shared): { Node }
 	-- Stopped pins by the row each one shows as, when its pane is gone: the pin's index.
 	local gone: { [Agent]: number } = {}
 	for _, agent in input.agents do
-		if agent.state == "waiting_input" then
-			table.insert(waiting, agent)
-		elseif agent.state == "working" then
+		if agent.state == "working" then
 			table.insert(working, agent)
 			table.insert(shown, agent)
 		elseif agent.state == "idle" then
@@ -1811,12 +1941,12 @@ local function liveBody(input: Input, shared: Shared): { Node }
 	end
 
 	local children: { Node } = {}
-	if #waiting > 0 then
-		local rows: { Node } = {}
-		for _, agent in waitOrder(waiting) do
-			table.insert(rows, row(agent, shared, pinned[agent.pane] == true, 0))
+	if #cards > 0 then
+		local nodes: { Node } = {}
+		for _, card in cards do
+			table.insert(nodes, card.node)
 		end
-		table.insert(children, zone("zone-needs", "waiting", "Needs you", tostring(#waiting), rows))
+		table.insert(children, zone("zone-needs", "waiting", "Needs you", tostring(#cards), nodes))
 	end
 	if #working > 0 then
 		local body = projectGroups(order, working, longestTurn, render, input.home)
@@ -1878,7 +2008,8 @@ end
 function viewModel.build(input: Input): Output
 	local shared = context(input)
 	local view: View = if input.view == "recent" then "recent" else "live"
-	local body = if view == "recent" then recentBody(input) else liveBody(input, shared)
+	local cards = needsCards(input, shared)
+	local body = if view == "recent" then recentBody(input) else liveBody(input, shared, cards)
 	local waiting: { number } = {}
 	for _, agent in waitOrder(input.agents) do
 		table.insert(waiting, agent.pane)
@@ -1887,7 +2018,10 @@ function viewModel.build(input: Input): Output
 		view = {
 			k = "col",
 			p = { role = ROLE.root, gap = "none" },
-			c = { chrome(view, input), { k = "col", p = { key = "body", role = ROLE.body, gap = "none" }, c = body } },
+			c = {
+				chrome(view, input, #cards),
+				{ k = "col", p = { key = "body", role = ROLE.body, gap = "none" }, c = body },
+			},
 		},
 		status = status(input.agents, input.plugin),
 		waiting = waiting,

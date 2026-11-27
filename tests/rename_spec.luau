@@ -50,7 +50,7 @@ t.test("Rename is off while omp shows a subagent, whose chat would take the comm
 end)
 
 t.test("Rename is off while the agent waits for an answer, which the command would give", function()
-	local menu = visible.menu(view({ agents = { agent({ state = "waiting_input" }) } }), "build")
+	local menu = visible.cardMenu(view({ agents = { agent({ state = "waiting_input" }) } }), "build")
 	t.eq(menu[2], "Rename → rename (off: The agent waits for your answer)")
 end)
 

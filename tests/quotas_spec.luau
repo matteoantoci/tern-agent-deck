@@ -36,6 +36,15 @@ t.test("hour and day windows shorten, other windows stay as they are, and a row 
 	t.eq({ found[1].label, found[2].label, found[3].label }, { "5h", "Weekly", "Theos" })
 end)
 
+t.test("a limit's qualifier follows its window, so two limits of one window stay apart", function()
+	local found = parse({
+		row({ "anthropic", "a@x.com", "7 Day", "Claude 7 Day", 0.5, "ok", NOW + HOUR }),
+		row({ "anthropic", "a@x.com", "7 Day", "Claude 7 Day (Fable)", 0.9, "warning", NOW + HOUR }),
+		row({ "xai-oauth", "a@x.com", "Weekly", "GrokChat (Weekly)", 0.5, "ok", NOW + HOUR }),
+	})
+	t.eq({ found[1].label, found[2].label, found[3].label }, { "7d", "7d Fable", "Weekly" })
+end)
+
 t.test("a quota whose window reset already, or that names no reset, is left out", function()
 	t.eq(
 		parse({
