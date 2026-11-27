@@ -89,10 +89,10 @@ t.test("an agent never seen in a turn counts as new", function()
 	t.eq(visible.rows(view({ agent({ title = "unknown age" }) })), { HEAD(1), "●(Idle) unknown age" })
 end)
 
-t.test("a pinned idle agent stays in Pinned however old it is", function()
+t.test("a pinned idle agent stays in Pinned however old it is, and folds into Older in its section", function()
 	t.eq(visible.rows(view({ agent({ pane = 1, title = "keep", activeAt = NOW - 9 * DAY }) }, {
 		pins = { { pane = 1, cwd = REPO, title = "keep" } },
-	})), { ":pin Pinned 1", "●(Idle) keep" })
+	})), { ":chev :pin Pinned 1", "●(Idle) keep", ":chev :mi-folder-open tern-agents 1 [:plus](New tab in this repo)", ":chev-r Older 1" })
 end)
 
 t.test("agents outside any repo get their Older row in their working directory's section", function()

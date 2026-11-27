@@ -102,10 +102,11 @@ t.test("Needs you and Pinned list their agents one level under their head", func
 	})), {
 		":bell Needs you 1",
 		"  ●(Waiting for you) ask tern-agents :bell",
-		":pin Pinned 1",
+		":chev :pin Pinned 1",
 		"  ●(Idle) keep",
-		string.format(FOLDER, 1),
+		string.format(FOLDER, 2),
 		"  ●(Waiting for you) ask :bell",
+		"  ●(Idle) keep",
 	})
 end)
 
@@ -124,8 +125,8 @@ t.test("a working agent row ends in nothing and a waiting one in a bell; model, 
 		"●(Waiting for you) b :bell",
 		"●(Idle) c",
 	})
-	t.eq(visible.hover(out, "(Working) a"), "a · Working\nModel Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
-	t.eq(visible.hover(out, "(Idle) c"), "c · Idle\nModel Kimi K2")
+	t.eq(visible.hover(out, "(Working) a"), "a · Working ⏱12s\nModel opus 5.5\nEffort high")
+	t.eq(visible.hover(out, "(Idle) c"), "c · Idle\nModel kimi k2")
 end)
 
 t.test("the Live view leaves closed sessions out", function()

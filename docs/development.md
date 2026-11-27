@@ -39,13 +39,19 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   `~/.omp/agent/sessions`, their last writes and the ones a process holds open; it keeps the result with each
   session's repo. A second `tern.process.run`, of `tern inspect --json` (with each scan, when an agent appears and
   when an agent's pane retitles itself), reads the session file each pane's omp reported to Tern
-  (`omp_session_file`): a live agent's session. After each of those reads, one `grep` of the reported files reads
-  their `model_change` entries: the main agent's model as `provider/model`, which its hover card shows.
+  (`omp_session_file`): a live agent's session. After each of those reads, one `grep` and `sed` over the reported
+  files reads their `model_change` entries and the model of each assistant message; the last one in each file is the
+  main agent's model as `provider/model`, which its hover card shows.
 - `lib/sessions.luau`: the pure parser of that scan's output (path, id, working directory, title, last write, open),
   of the `tern inspect` answer (session file by pane), of the `model_change` entries (model by file) and of a
   session file's header id.
 - `lib/session_copy.luau`: what "Copy session ID" and "Copy session path" copy (the header's id or the file's path)
   and the toast that says so, from the start of the file.
+- `lib/summaries.luau`: the summary reader. For each main agent with a long last message (280 characters or more),
+  one `omp -p --model @smol` run (no tools, extensions, skills, rules, context files or session; about 4 s, 8 s when
+  the answer needs shortening) writes a short summary for its hover card. A working agent's message is summarized
+  once it stayed the same 15 s; until a new summary arrives, the card shows the pane's summary before. The
+  summaries live in `tern.kv`, shared by every window; one run at a time.
 - `lib/subagent_reader.luau`: the subagent reader. On each tick it reads the TSP surface of one working agent, in
   rotation: a find read lists the running `task` tool nodes (again once 5 s passed since that agent's last find read,
   or when a call ended), the reads in between set `root` to each of them. While omp's HUD counts more running

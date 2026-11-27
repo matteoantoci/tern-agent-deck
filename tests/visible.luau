@@ -212,7 +212,7 @@ local function findRow(view: Node, text: string): Node
 end
 
 --- What the hover card of the row that shows `text` holds, one line per part of the card (each line as `rows`
---- writes a row), or nil when it has no card.
+--- writes a row; each item of a key/value grid as its key and value), or nil when it has no card.
 function visible.hover(view: Node, text: string): string?
 	local card = props(findRow(view, text)).hovercard
 	if card == nil then
@@ -220,7 +220,13 @@ function visible.hover(view: Node, text: string): string?
 	end
 	local out: { string } = {}
 	for _, child in kids(card) do
-		table.insert(out, line(child))
+		if child.k == "kv" then
+			for _, item in props(child).items or {} do
+				table.insert(out, spanText(item.k) .. " " .. spanText(item.v))
+			end
+		else
+			table.insert(out, line(child))
+		end
 	end
 	return table.concat(out, "\n")
 end

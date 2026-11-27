@@ -77,7 +77,7 @@ end)
 
 t.test("a working row's hover card counts the turn from its start", function()
 	local view = viewModel.build({ agents = { agent({ state = "working", workingSince = 1000 }) }, now = 66000 }).view
-	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Working\nWorking for ⏱65s")
+	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Working ⏱65s")
 end)
 
 t.test("a tab name the user set replaces the pane title", function()
@@ -99,7 +99,7 @@ end)
 t.test("the hover card names the model without its glyph and with no logo", function()
 	local view = viewModel.build({ agents = { agent({ model = "Opus 5.5 \u{F0EB}" }) }, now = 0 }).view
 	t.eq(visible.rows(view)[2], "●(Idle) " .. ICON .. "Fix login")
-	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Idle\nModel Opus 5.5")
+	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Idle\nModel opus 5.5")
 end)
 
 t.test("the hover card names an omp agent's model as its session does, provider/model, rather than Tern's name", function()

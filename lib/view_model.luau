@@ -31,6 +31,10 @@ export type Agent = {
 	effort: string?,
 	--- The agent's last assistant message (Markdown).
 	lastMessage: string?,
+	--- A short summary of `lastMessage` by omp's light model, when the message is long; nil until it arrives.
+	summary: string?,
+	--- Whether a run is making the summary of `lastMessage` now.
+	summarizing: boolean?,
 	--- `tern.now()` when the agent began its current turn; the timer counts from here.
 	workingSince: number?,
 	--- The root of the agent's main git repo (worktrees and ovnfs checkouts resolve to their main repo); nil when
@@ -131,15 +135,12 @@ local DOT: { [AgentState]: { tone: string, label: string, hollow: boolean?, puls
 	exited = { tone = "dim", label = "Exited", hollow = true },
 }
 
--- A hover card holds at most this many bytes of the last message, so that a long answer does not
--- fill the canvas's 256 KiB per update.
-local MESSAGE_BYTES = 4000
-
-local function clip(text: string): string
-	if #text <= MESSAGE_BYTES then
+-- `text` cut to at most `bytes` bytes at the start of a UTF-8 character, with `…`; whole when it fits.
+local function clip(text: string, bytes: number): string
+	if #text <= bytes then
 		return text
 	end
-	local cut = MESSAGE_BYTES
+	local cut = bytes
 	-- Back off to the start of a UTF-8 character.
 	while cut > 1 and bit32.band(string.byte(text, cut + 1), 0xC0) == 0x80 do
 		cut -= 1
@@ -336,21 +337,68 @@ local function dotNode(tone: string, label: string, hollow: boolean?, pulse: boo
 	return { k = "text", p = { spans = { span }, aria = label, role = ROLE.dot } }
 end
 
--- One hover-card line: a muted label and its value.
-local function fact(label: string, value: string): Node
-	local spans: { { [string]: string } } = { { t = label .. " ", s = "muted" }, { t = value } }
-	return { k = "text", p = { spans = spans } }
+-- A hover card's facts: an aligned grid of muted labels and their values, as `tern.ui.kv` builds it.
+type Facts = { { k: string, v: string } }
+
+local function factsNode(facts: Facts): Node?
+	if #facts == 0 then
+		return nil
+	end
+	local items: { { k: { { [string]: string } }, v: { { [string]: string } } } } = {}
+	for _, fact in facts do
+		table.insert(items, { k = { { t = fact.k, s = "muted" } }, v = { { t = fact.v } } })
+	end
+	return { k = "kv", p = { items = items } }
 end
 
--- The hover card's first line: the name, and the state after it.
-local function cardHead(name: string, state: string): Node
-	return { k = "text", p = { spans = { { t = name, s = "strong" }, { t = " · " .. state, s = "muted" } } } }
-end
-
--- The hover card's effort line: the glyph and the level.
-local function effortFact(level: string): Node
-	local children: { Node } = { { k = "effort", p = { level = level } }, fact("Effort", level) }
+-- The hover card's first line: the name, the state after it and, while the agent works, the live turn timer.
+local function cardHead(name: string, state: string, age: number?): Node
+	local text: Node = { k = "text", p = { spans = { { t = name, s = "strong" }, { t = " · " .. state, s = "muted" } } } }
+	if not age then
+		return text
+	end
+	local children: { Node } = { text, { k = "elapsed", p = { age = age } } }
 	return { k = "row", p = { gap = "sm" }, c = children }
+end
+
+-- A hover card: its head, its facts, then the rest, with room between the parts.
+local function card(head: Node, facts: Facts, rest: { Node }): Node
+	local children: { Node } = { head }
+	local grid = factsNode(facts)
+	if grid then
+		table.insert(children, grid)
+	end
+	for _, node in rest do
+		table.insert(children, node)
+	end
+	return { k = "col", p = { gap = "sm" }, c = children }
+end
+
+-- A last message this long or longer gets a summary from omp's light model (`lib/summaries.luau`); a shorter one
+-- shows whole.
+local SUMMARY_FROM = 280
+
+--- Whether the last message `text` is long enough that its hover card shows a summary of it.
+function viewModel.needsSummary(text: string): boolean
+	local trimmed = nonEmpty(text)
+	return trimmed ~= nil and #trimmed >= SUMMARY_FROM
+end
+
+-- The hover card's last message: whole (Markdown) when short; when long, its summary, else a note while the summary
+-- is being made, else (no summary could be made) its start. Each is a Markdown node, which wraps to the card's width:
+-- a `text` node with a line limit drew a cut line with `…` in Tern 0.9.36.
+local function messageNode(message: string, summary: string?, summarizing: boolean?): Node
+	if #message < SUMMARY_FROM then
+		return { k = "md", p = { text = message } }
+	end
+	local short = nonEmpty(summary)
+	if short then
+		return { k = "md", p = { text = short } }
+	end
+	if summarizing then
+		return { k = "text", p = { spans = { { t = "Summarizing the last message…", s = "muted" } } } }
+	end
+	return { k = "md", p = { text = clip(message, SUMMARY_FROM) } }
 end
 
 -- omp's thinking levels, which a model route may end in (`:high`).
@@ -372,8 +420,8 @@ local function modelRoute(model: string?): string?
 end
 
 -- How much of its task a subagent says it finished, as a whole percentage.
-local function progressFact(done: number): Node
-	return fact("Progress", string.format("%d%%", math.floor(done * 100 + 0.5)))
+local function percent(done: number): string
+	return string.format("%d%%", math.floor(done * 100 + 0.5))
 end
 
 -- The mark at the right end of an agent row: the bell while it waits for the user, in neutral (the state dot
@@ -387,8 +435,8 @@ end
 
 -- An agent's row at `depth` in the tree: the state dot, the name and, when `place` is given, the repo's folder name
 -- after it (the Needs you strip shows where each agent works), then the bell of a waiting agent. A row carries no
--- tooltip: its hover card holds every fact: the state, the repo, the model with its provider's logo, the effort,
--- the live turn timer and the last message.
+-- tooltip: its hover card holds every fact: the state and the live turn timer, the repo, the model, the effort and
+-- the last message (or its summary).
 local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number, place: { name: string, path: string }?): Node
 	local dot = DOT[agent.state]
 	local shownName = name(agent, shared)
@@ -397,32 +445,31 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 		-- An exited agent shows only while pinned, dimmed.
 		nameNode(shownName, if agent.state == "exited" then "dim" else nil, place ~= nil),
 	}
-	local card: { Node } = { cardHead(shownName, dot.label) }
+	local facts: Facts = {}
 	if place then
 		table.insert(children, detailNode(place.name))
-		table.insert(card, fact("Repo", place.path))
+		table.insert(facts, { k = "Repo", v = place.path })
 	end
 	local mark = endMark(agent.state)
 	if mark then
 		table.insert(children, mark)
 	end
-	-- omp's session names the model with its provider; an agent without one (not omp) shows Tern's model name.
-	local model = modelRoute(agent.route) or plainModel(agent.model)
+	-- omp's session names the model as `provider/model`; an agent without one (not omp) shows Tern's model name, in
+	-- lower case as the routes are.
+	local display = plainModel(agent.model)
+	local model = modelRoute(agent.route) or (display and string.lower(display))
 	if model then
-		table.insert(card, fact("Model", model))
+		table.insert(facts, { k = "Model", v = model })
 	end
 	local effort = nonEmpty(agent.effort)
 	if effort then
-		table.insert(card, effortFact(effort))
+		table.insert(facts, { k = "Effort", v = effort })
 	end
-	if agent.state == "working" then
-		local age = math.max(0, shared.now - (agent.workingSince or shared.now))
-		local timer: { Node } = { { k = "text", p = { spans = { { t = "Working for", s = "muted" } } } }, { k = "elapsed", p = { age = age } } }
-		table.insert(card, { k = "row", p = { gap = "sm" }, c = timer })
-	end
+	local age = if agent.state == "working" then math.max(0, shared.now - (agent.workingSince or shared.now)) else nil
+	local rest: { Node } = {}
 	local message = nonEmpty(agent.lastMessage)
 	if message then
-		table.insert(card, { k = "md", p = { text = clip(message) } })
+		table.insert(rest, messageNode(message, agent.summary, agent.summarizing))
 	end
 	local pane = string.format("%.0f", agent.pane)
 	-- An exited agent (it shows only while pinned) has no program to focus: a click resumes its session.
@@ -434,7 +481,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 		gap = "sm",
 		role = rowRole(if shared.focused == agent.pane then "on" else "item", depth),
 		actions = { click = click, menu = menu(agent, pane, pinned, shared.viewing[agent.pane] ~= nil) },
-		hovercard = { k = "col", p = { gap = "xs" }, c = card },
+		hovercard = card(cardHead(shownName, dot.label, age), facts, rest),
 	}
 	return { k = "row", p = props, c = children }
 end
@@ -606,6 +653,16 @@ local function foldRow(key: string, label: string, count: number, open: boolean,
 	return { k = "row", p = p, c = children }
 end
 
+-- The Pinned head: drawn as a folder row (the chevron, the pin in the folder glyph's column, the label and the
+-- count), so that the user folds Pinned as a folder; a click sends `fold=pinned`.
+local PINNED_KEY = "pinned"
+local function pinnedHead(count: number, open: boolean): Node
+	local children: { Node } = { chevron(open), iconNode("pin", "muted"), nameNode("Pinned"), countNode(count, ROLE.meta) }
+	local p: { [string]: any } =
+		{ key = "head", gap = "sm", role = rowRole("folder", 0), actions = { click = "fold=" .. PINNED_KEY } }
+	return { k = "row", p = p, c = children }
+end
+
 -- The `+` button that opens a new tab in `folder` (a repo when `repo`); it shows while the pointer is on its row.
 local function plusButton(folder: string, repo: boolean): Node
 	return {
@@ -726,34 +783,35 @@ local function subRow(
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
 	end
-	local card: { Node } = { cardHead(sub.name, state) }
+	local facts: Facts = {}
 	if role then
-		table.insert(card, fact("Role", role))
+		table.insert(facts, { k = "Role", v = role })
 	end
 	if parent then
-		table.insert(card, fact("Under", parent))
+		table.insert(facts, { k = "Under", v = parent })
 	end
 	local model = modelRoute(sub.model)
 	if model then
-		table.insert(card, fact("Model", model))
+		table.insert(facts, { k = "Model", v = model })
 	end
 	local effort = nonEmpty(sub.effort)
 	if effort then
-		table.insert(card, effortFact(effort))
+		table.insert(facts, { k = "Effort", v = effort })
 	end
 	if sub.done then
-		table.insert(card, progressFact(sub.done))
+		table.insert(facts, { k = "Progress", v = percent(sub.done) })
 	end
 	local tool = nonEmpty(sub.tool)
 	if tool then
-		table.insert(card, fact("Tool", tool))
+		table.insert(facts, { k = "Tool", v = tool })
 	end
 	local intent = nonEmpty(sub.intent)
 	if intent then
-		table.insert(card, fact("Intent", intent))
+		table.insert(facts, { k = "Intent", v = intent })
 	end
+	local rest: { Node } = {}
 	if frozen then
-		table.insert(card, { k = "text", p = { spans = { { t = "Not updated while omp shows another subagent", s = "muted" } } } })
+		table.insert(rest, { k = "text", p = { spans = { { t = "Not updated while omp shows another subagent", s = "muted" } } } })
 	end
 	return {
 		k = "row",
@@ -768,7 +826,7 @@ local function subRow(
 					if agentFile then "The subagent's name is no omp id" else NO_SESSION_FILE
 				),
 			},
-			hovercard = { k = "col", p = { gap = "xs" }, c = card },
+			hovercard = card(cardHead(sub.name, state), facts, rest),
 		},
 		c = children,
 	}
@@ -1007,7 +1065,7 @@ end
 -- The hover card line of a Recent folder: how long ago its newest session was written.
 local function lastSession(sessions: { Session }, time: number): Node
 	local when = ago(math.max(0, time - sessions[1].at))
-	return fact("Last session", if when == "now" then "just now" else when .. " ago")
+	return factsNode({ { k = "Last session", v = if when == "now" then "just now" else when .. " ago" } }) :: Node
 end
 
 local function folderName(folder: string): string
@@ -1293,10 +1351,11 @@ local function liveBody(input: Input, shared: Shared): { Node }
 	for _, agent in matched do
 		pinned[agent.pane] = true
 	end
-	-- Pinned agents show only in Pinned; exited agents leave the list unless pinned.
+	-- A pinned agent shows in Pinned and again in its folder; an exited agent leaves the list unless pinned, and then
+	-- shows only in Pinned.
 	local listed: { Agent } = {}
 	for _, agent in input.agents do
-		if not pinned[agent.pane] and agent.state ~= "exited" then
+		if agent.state ~= "exited" then
 			table.insert(listed, agent)
 		end
 	end
@@ -1306,6 +1365,9 @@ local function liveBody(input: Input, shared: Shared): { Node }
 	-- names its folder.
 	local strip: { Node } = {}
 	for _, agent in waitOrder(listed) do
+		if pinned[agent.pane] then
+			continue
+		end
 		local folder = folderOf(agent)
 		local place = folder and { name = folderName(folder), path = viewModel.shortPath(folder, input.home) }
 		table.insert(strip, row(agent, shared, false, 1, place))
@@ -1314,9 +1376,12 @@ local function liveBody(input: Input, shared: Shared): { Node }
 		table.insert(strip, 1, head("bell", "warning", "Needs you", #strip))
 		table.insert(children, { k = "col", p = { key = "needs-you", gap = "none" }, c = strip })
 	end
+	local folded = input.folded or {}
 	if #pins > 0 then
-		local section: { Node } = { head("pin", "muted", "Pinned", #pins) }
-		for i, pin in pins do
+		local open = folded[PINNED_KEY] ~= true
+		local section: { Node } = { pinnedHead(#pins, open) }
+		local shownPins: { Pin } = if open then pins else {}
+		for i, pin in shownPins do
 			local agent = matched[i]
 			if agent and agent.state ~= "exited" then
 				table.insert(section, entry(agent, shared, subs[agent.pane], true, 1))
@@ -1371,7 +1436,6 @@ local function liveBody(input: Input, shared: Shared): { Node }
 	end
 	-- Each folder's section: its folder row, then, unless the user folded it, the agents in start order and the
 	-- "Older" row with, while it is open, the old idle agents one level under it.
-	local folded = input.folded or {}
 	for _, group in groups do
 		local open = folded[group.key] ~= true
 		local section: { Node } = {
@@ -1393,7 +1457,7 @@ local function liveBody(input: Input, shared: Shared): { Node }
 				if isOlder(agent, input.time) then
 					table.insert(older, agent)
 				else
-					table.insert(section, entry(agent, shared, subs[agent.pane], false, 1))
+					table.insert(section, entry(agent, shared, subs[agent.pane], pinned[agent.pane] == true, 1))
 				end
 			end
 			if #older > 0 then
@@ -1401,7 +1465,7 @@ local function liveBody(input: Input, shared: Shared): { Node }
 				table.insert(section, foldRow("older", "Older", #older, olderShown, "older=" .. group.key, 1))
 				if olderShown then
 					for _, agent in older do
-						table.insert(section, entry(agent, shared, subs[agent.pane], false, 2))
+						table.insert(section, entry(agent, shared, subs[agent.pane], pinned[agent.pane] == true, 2))
 					end
 				end
 			end

@@ -16,6 +16,7 @@ local store = require("./store")
 local subagentReader = require("./subagent_reader")
 local subagents = require("./subagents")
 local viewModel = require("./view_model")
+local summaries = require("./summaries")
 local viewing = require("./viewing")
 
 local sidebar = {}
@@ -126,6 +127,15 @@ local function snapshot(cx: WindowCx): viewModel.Input
 		end
 		local cwd = str(block.cwd)
 		local file = reported[block.pane]
+		local message = str(block.last_message)
+		-- A long last message gets a summary from omp's light model, while the sidebar shows; one run at a time. A
+		-- working agent's message still grows: it waits until it holds still (`lib/summaries.luau`).
+		local settled = block.state == "idle" or block.state == "waiting_input"
+		if (settled or block.state == "working") and tern.kv.get(HIDDEN_KEY) ~= true then
+			summaries.request(block.pane, message, settled, function(later: WindowCx)
+				sidebar.refresh(later)
+			end)
+		end
 		table.insert(agents, {
 			pane = block.pane,
 			state = block.state,
@@ -135,11 +145,21 @@ local function snapshot(cx: WindowCx): viewModel.Input
 			cwd = cwd,
 			model = str(block.model),
 			effort = effortReader.level(block.pane),
-			lastMessage = str(block.last_message),
+			lastMessage = message,
+			summary = summaries.get(block.pane, message),
+			summarizing = summaries.pending(block.pane, message),
 			repo = repos.of(cwd),
 			sessionFile = file,
 			route = file and sessionReader.model(file),
 		})
+	end
+	-- Summaries of panes that run no agent now go; an empty list may be a daemon restart, which keeps them.
+	if #agents > 0 then
+		local live: { [number]: boolean } = {}
+		for _, agent in agents do
+			live[agent.pane] = true
+		end
+		summaries.keep(live)
 	end
 	return store.fill({
 		agents = agents,

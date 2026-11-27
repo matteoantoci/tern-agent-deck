@@ -27,7 +27,7 @@ local function view(input: { [string]: any }): any
 	return viewModel.build(full :: any).view
 end
 
-t.test("a pinned agent shows in Pinned at the top and not in its repo section", function()
+t.test("a pinned agent shows in Pinned at the top and again in its repo section", function()
 	t.eq(visible.rows(view({
 		agents = {
 			agent({ pane = 1, title = "plan" }),
@@ -35,10 +35,11 @@ t.test("a pinned agent shows in Pinned at the top and not in its repo section", 
 		},
 		pins = { { pane = 2, cwd = REPO, title = "build" } },
 	})), {
-		":pin Pinned 1",
+		":chev :pin Pinned 1",
 		"●(Idle) build",
-		":chev :mi-folder-open tern-agents 1 [:plus](New tab in this repo)",
+		":chev :mi-folder-open tern-agents 2 [:plus](New tab in this repo)",
 		"●(Idle) plan",
+		"●(Idle) build",
 	})
 end)
 
@@ -46,15 +47,29 @@ t.test("Pinned lists the pinned agents in the order they were pinned", function(
 	t.eq(visible.rows(view({
 		agents = { agent({ pane = 1, title = "plan" }), agent({ pane = 2, title = "build" }) },
 		pins = { { pane = 2, cwd = REPO, title = "build" }, { pane = 1, cwd = REPO, title = "plan" } },
-	})), { ":pin Pinned 2", "●(Idle) build", "●(Idle) plan" })
+	})), {
+		":chev :pin Pinned 2",
+		"●(Idle) build",
+		"●(Idle) plan",
+		":chev :mi-folder-open tern-agents 2 [:plus](New tab in this repo)",
+		"●(Idle) plan",
+		"●(Idle) build",
+	})
 end)
 
-t.test("a pinned working agent keeps its subagent rows in Pinned", function()
+t.test("a pinned working agent keeps its subagent rows in Pinned and in its repo section", function()
 	t.eq(visible.rows(view({
 		agents = { agent({ pane = 7, title = "Lead", state = "working", workingSince = 0 }) },
 		pins = { { pane = 7, cwd = REPO, title = "Lead" } },
 		subagents = { [7] = { agents = { { id = "dx.A", name = "A", status = "running", depth = 1 } }, incomplete = false } },
-	})), { ":pin Pinned 1", "●(Working) Lead", "●(Running) A" })
+	})), {
+		":chev :pin Pinned 1",
+		"●(Working) Lead",
+		"●(Running) A",
+		":chev :mi-folder-open tern-agents 1 [:plus](New tab in this repo)",
+		"●(Working) Lead",
+		"●(Running) A",
+	})
 end)
 
 t.test("when the pane id changed, a pin finds its agent by working directory and title", function()
@@ -64,10 +79,11 @@ t.test("when the pane id changed, a pin finds its agent by working directory and
 	}
 	local pins = { { pane = 2, cwd = REPO, title = "build" } }
 	t.eq(visible.rows(view({ agents = agents, pins = pins })), {
-		":pin Pinned 1",
+		":chev :pin Pinned 1",
 		"●(Idle) build",
-		":chev :mi-folder-open tern-agents 1 [:plus](New tab in this repo)",
+		":chev :mi-folder-open tern-agents 2 [:plus](New tab in this repo)",
 		"●(Idle) plan",
+		"●(Idle) build",
 	})
 	t.eq(viewModel.resolvePins(agents :: any, pins), { { pane = 41, cwd = REPO, title = "build" } })
 end)
@@ -83,7 +99,7 @@ t.test("a pin ignores another agent that got its old pane id in another folder",
 	local agents = { agent({ pane = 2, title = "other work", cwd = "/tmp" }) }
 	local pins = { { pane = 2, cwd = REPO, title = "build" } }
 	local v = view({ agents = agents, pins = pins })
-	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build", ":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)", "●(Idle) other work" })
+	t.eq(visible.rows(v), { ":chev :pin Pinned 1", "○(Exited) build", ":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)", "●(Idle) other work" })
 	t.eq(visible.click(v, "build"), "gone=1", "a click on the gone agent does not focus the other one")
 	t.eq(visible.menu(v, "build")[1], "Unpin → forget=1")
 	t.eq(visible.menu(v, "other work")[1], "Pin → pin=2")
@@ -100,7 +116,7 @@ t.test("a pinned agent that exited stays in Pinned, dimmed", function()
 		agents = { agent({ pane = 2, title = "build", state = "exited" }) },
 		pins = { { pane = 2, cwd = REPO, title = "build" } },
 	})
-	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build" })
+	t.eq(visible.rows(v), { ":chev :pin Pinned 1", "○(Exited) build" })
 	t.eq(visible.dimmed(v, "build"), true)
 end)
 
@@ -126,7 +142,7 @@ end)
 
 t.test("a pinned agent whose pane is gone stays in Pinned, dimmed, under its last title", function()
 	local v = view({ agents = {}, pins = { { pane = 2, cwd = REPO, title = "\u{F0E7} build" } } })
-	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) \u{F0E7} build" })
+	t.eq(visible.rows(v), { ":chev :pin Pinned 1", "○(Exited) \u{F0E7} build" })
 	t.eq(visible.dimmed(v, "\u{F0E7} build"), true)
 	t.eq(visible.click(v, "\u{F0E7} build"), "gone=1")
 end)
@@ -158,7 +174,12 @@ t.test("a pin follows its session to the agent that resumed it, and keeps the se
 	}
 	local pins = { { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } }
 	t.eq(viewModel.resolvePins(agents :: any, pins), { { pane = 9, cwd = REPO, title = "build", sessionFile = SESSION } })
-	t.eq(visible.rows(view({ agents = agents, pins = pins })), { ":pin Pinned 1", "●(Idle) build" })
+	t.eq(visible.rows(view({ agents = agents, pins = pins })), {
+		":chev :pin Pinned 1",
+		"●(Idle) build",
+		":chev :mi-folder-open tern-agents 1 [:plus](New tab in this repo)",
+		"●(Idle) build",
+	})
 	t.eq(
 		viewModel.resolvePins({ agent({ pane = 2, title = "build", sessionFile = SESSION }) } :: any, { { pane = 2, cwd = REPO, title = "build" } }),
 		{ { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } }
@@ -211,7 +232,22 @@ t.test("with a pin, agents outside any repo keep their folder's section", functi
 	t.eq(visible.rows(view({
 		agents = { agent({ pane = 1, title = "a", cwd = "/tmp" }), agent({ pane = 2, title = "b", cwd = "/tmp" }) },
 		pins = { { pane = 1, cwd = "/tmp", title = "a" } },
-	})), { ":pin Pinned 1", "●(Idle) a", ":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)", "●(Idle) b" })
+	})), { ":chev :pin Pinned 1", "●(Idle) a", ":chev :mi-folder-open tmp 2 [:plus](New tab in this folder)", "●(Idle) a", "●(Idle) b" })
+end)
+
+t.test("a click on the Pinned head folds it, and folded Pinned shows only its head while the folder still lists the agent", function()
+	local input: { [string]: any } = {
+		agents = { agent({ pane = 1, title = "plan" }), agent({ pane = 2, title = "build" }) },
+		pins = { { pane = 2, cwd = REPO, title = "build" } },
+	}
+	t.eq(visible.click(view(input), "Pinned"), "fold=pinned")
+	input.folded = { pinned = true }
+	t.eq(visible.rows(view(input)), {
+		":chev-r :pin Pinned 1",
+		":chev :mi-folder-open tern-agents 2 [:plus](New tab in this repo)",
+		"●(Idle) plan",
+		"●(Idle) build",
+	})
 end)
 
 return nil

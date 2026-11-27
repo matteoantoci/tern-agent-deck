@@ -64,7 +64,13 @@ t.test("Needs you hides when no agent waits, and leaves out a waiting agent that
 	t.eq(visible.rows(build({
 		agents = { agent({ pane = 1, title = "plan" }), agent({ pane = 2, title = "ask", state = "waiting_input" }) },
 		pins = { { pane = 2, cwd = REPO, title = "ask" } },
-	}).view), { ":pin Pinned 1", "●(Waiting for you) ask :bell", HEAD(1), "●(Idle) plan" })
+	}).view), {
+		":chev :pin Pinned 1",
+		"●(Waiting for you) ask :bell",
+		HEAD(2),
+		"●(Idle) plan",
+		"●(Waiting for you) ask :bell",
+	})
 end)
 
 t.test("Needs you lists the agent that has waited longest first", function()

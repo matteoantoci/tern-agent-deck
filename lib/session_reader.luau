@@ -202,11 +202,20 @@ function reader.model(file: string): string?
 	return models[file]
 end
 
--- Reads the model of each reported session file, off the UI thread: one `grep` prints the `model_change` entries of
--- every file (a fixed string; a JSON string value escapes its quotes, so a message that quotes one does not match).
+-- `$@` the session files. For each file, in file order: `<path>\tC\t<entry>` for each `model_change` entry, and
+-- `<path>\tA\t<provider>/<model>` for each assistant message (the model that served the turn). A JSON string value
+-- escapes its quotes, so text that quotes either does not match.
+local MODELS = [[
+t=$(printf '\t')
+/usr/bin/grep -H -E '^\{"type":"(model_change|message)",' -- "$@" | /usr/bin/sed -n -E \
+	-e "s/^(.*\.jsonl):(\{\"type\":\"model_change\".*)\$/\1${t}C${t}\2/p" \
+	-e "s/^(.*\.jsonl):\{\"type\":\"message\".*\"message\":\{\"role\":\"assistant\".*\"provider\":\"([^\"]*)\",\"model\":\"([^\"]*)\".*\$/\1${t}A${t}\2\/\3/p"
+]]
+
+-- Reads the model of each reported session file, off the UI thread, with one `grep` and `sed` over every file.
 -- `changed` runs, with a fresh `cx`, when the answer differs from the last one.
 local function readModels(files: { [number]: string }, changed: (cx: WindowCx) -> ())
-	local argv = { "/usr/bin/grep", "-H", "-F", '"type":"model_change"', "--" }
+	local argv = { "/bin/sh", "-c", MODELS, "sh" }
 	local seen: { [string]: boolean } = {}
 	for _, file in files do
 		if not seen[file] then
@@ -216,7 +225,7 @@ local function readModels(files: { [number]: string }, changed: (cx: WindowCx) -
 	end
 	modelRead += 1
 	local this = modelRead
-	if #argv == 5 then
+	if #argv == 4 then
 		models = {}
 		return
 	end

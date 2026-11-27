@@ -50,7 +50,7 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | The Live and Recent buttons | Switch the view. |
 | ⋯ in the head | Opens a menu: New tab here, Arrange tabs by project, Toggle sidebar. |
 
-Point at a row to see its card: the state, the model as `provider/model`, the effort, a subagent's own estimate of its progress, the turn timer and the last message.
+Point at a row to see its card: the state and the turn timer, then a grid with the model as `provider/model`, the effort and a subagent's own estimate of its progress, then the last message. A long last message shows a short summary that omp's light model (`@smol`) writes: about 4 seconds after the turn ends, or, while the agent works, once its text stays the same for 15 seconds. Until a new summary arrives, the card keeps the one before.
 
 ### Right-click menu
 

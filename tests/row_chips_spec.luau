@@ -20,7 +20,7 @@ end
 t.test("a working row shows the dot and the name only; the model, effort and timer are in its card", function()
 	local out = view({ agent({ state = "working", model = "Opus 5.5 \u{F0EB}", effort = "high", workingSince = 0 }) }, 12000)
 	t.eq(visible.agentRows(out), { "●(Working) Fix login" })
-	t.eq(visible.hover(out, "Fix login"), "Fix login · Working\nModel Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
+	t.eq(visible.hover(out, "Fix login"), "Fix login · Working ⏱12s\nModel opus 5.5\nEffort high")
 end)
 
 t.test("a row shows no model text: an unknown model and an empty effort show nothing on the row", function()
@@ -32,11 +32,11 @@ end)
 
 t.test("the hover card names the agent and its state, its model and its effort, then shows the last message", function()
 	local out = view({ agent({ model = "Opus 5.5 \u{F0EB}", effort = "xhigh", lastMessage = "Tests pass." }) })
-	t.eq(visible.hover(out, "Fix login"), "Fix login · Idle\nModel Opus 5.5\n◔xhigh Effort xhigh\nTests pass.")
+	t.eq(visible.hover(out, "Fix login"), "Fix login · Idle\nModel opus 5.5\nEffort xhigh\nTests pass.")
 end)
 
 t.test("a hover card leaves out what the agent does not tell", function()
-	t.eq(visible.hover(view({ agent({ model = "Kimi K2" }) }), "Fix login"), "Fix login · Idle\nModel Kimi K2")
+	t.eq(visible.hover(view({ agent({ model = "Kimi K2" }) }), "Fix login"), "Fix login · Idle\nModel kimi k2")
 	t.eq(visible.hover(view({ agent({ lastMessage = "Done." }) }), "Fix login"), "Fix login · Idle\nDone.")
 end)
 
@@ -44,8 +44,20 @@ t.test("the turn timer counts in the hover card from the start of the turn", fun
 	local function card(now: number): string?
 		return visible.hover(view({ agent({ state = "working", workingSince = 1000 }) }, now), "Fix login")
 	end
-	t.eq(card(1000), "Fix login · Working\nWorking for ⏱0s")
-	t.eq(card(66000), "Fix login · Working\nWorking for ⏱65s")
+	t.eq(card(1000), "Fix login · Working ⏱0s")
+	t.eq(card(66000), "Fix login · Working ⏱65s")
+end)
+
+t.test("a long last message shows its summary; before the summary arrives, its first 280 bytes", function()
+	local long = string.rep("The sidebar now resumes pinned sessions and keeps omp's icon. ", 6) .. "Done."
+	local waiting = view({ agent({ lastMessage = long }) })
+	t.eq(visible.hover(waiting, "Fix login"), "Fix login · Idle\n" .. string.sub(long, 1, 280) .. "…")
+	local pending = view({ agent({ lastMessage = long, summarizing = true }) })
+	t.eq(visible.hover(pending, "Fix login"), "Fix login · Idle\nSummarizing the last message…")
+	local summed = view({ agent({ lastMessage = long, summary = "Pins resume their sessions; titles keep omp's icon." }) })
+	t.eq(visible.hover(summed, "Fix login"), "Fix login · Idle\nPins resume their sessions; titles keep omp's icon.")
+	t.eq(viewModel.needsSummary(long), true)
+	t.eq(viewModel.needsSummary("Tests pass."), false)
 end)
 
 t.test("agent names render in the sans face", function()
@@ -59,7 +71,7 @@ t.test("a row with a hover card carries no tooltip on itself or on its parts: ev
 	t.eq(visible.titles(out, "Fix login"), {})
 	t.eq(
 		visible.hover(out, "Fix login"),
-		"Fix login · Working\nModel Opus 5.5\n◔high Effort high\nWorking for ⏱12s\nOn it."
+		"Fix login · Working ⏱12s\nModel opus 5.5\nEffort high\nOn it."
 	)
 	local idle = view({ agent({}) })
 	t.eq(visible.titles(idle, "Fix login"), {})
