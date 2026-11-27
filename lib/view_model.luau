@@ -1270,28 +1270,31 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
-	-- The subagent omp shows in the pane keeps its line, finished or not: under the open strip, or with no strip at
-	-- all, under the row without a toggle. Under a closed strip it hides like the others. In the focused pane it
-	-- takes the selection from its agent's row.
+	-- The subagent omp shows in the pane keeps its line, finished or not: under the open strip, with no strip under
+	-- the row without a toggle, and under a closed strip as a flat line like a failure. In the focused pane it takes
+	-- the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
-	local kept = if open or not strip then viewed else nil
-	local shown = if shared.focused == agent.pane then kept else nil
-	local drawn, past = drawnSubs(subs, kept, math.min(SUB_LINES, shared.subLines))
+	local shown = if shared.focused == agent.pane then viewed else nil
+	local drawn, past = drawnSubs(subs, viewed, math.min(SUB_LINES, shared.subLines))
 	for _, sub in subs.agents do
 		if sub.depth > MAX_DEPTH then
 			if sub.status == "running" then
 				deeper += 1
 			end
 		elseif drawn[sub] then
-			local keptLine = viewing.shows(sub, kept)
+			local keptLine = viewing.shows(sub, viewed)
 			if open or keptLine or sub.status == "failed" then
 				local selected = viewing.shows(sub, shown)
 				if selected then
 					(main.p :: { [string]: any }).role = rowRole("item", depth)
 				end
 				local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
-				local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
-				table.insert(if open or keptLine then lines else failed, line)
+				-- A closed strip still shows a failure and the shown line one step under its agent as a flat line:
+				-- its depth means nothing there.
+				local inTree = open or (keptLine and not strip)
+				local at = if inTree then depth + sub.depth else depth + 1
+				local line = subLine(sub, pane, agent.sessionFile, at, selected, frozen, shared)
+				table.insert(if inTree then lines else failed, line)
 				shared.subLines -= 1
 			end
 		end
@@ -1309,9 +1312,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			table.insert(lines, infoLine("subs-incomplete", iconNode("warn", "warning"), text, "warning", depth + 1))
 		end
 	end
-	-- A closed strip still shows a failure, one step under its agent as a flat line: its depth means nothing there.
 	for _, line in failed do
-		(line.p :: { [string]: any }).role = rowRole("item", depth + 1)
 		table.insert(lines, line)
 	end
 	if #lines == 1 then
