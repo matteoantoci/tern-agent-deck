@@ -85,11 +85,11 @@ t.test("with no recent folder, the Recent view shows its empty state", function(
 	t.eq(visible.lines(view({}, { session("/Users/me/stale", "c", 8 * DAY) })), { EMPTY })
 end)
 
-t.test("the Recent view lists folders while no agent runs, and the Live view shows its empty state", function()
+t.test("the Recent view lists folders while no agent runs, and the Live view shows its calm line", function()
 	local sessions = { session("/Users/me/alpha", "a", HOUR) }
 	t.eq(visible.rows(view({}, sessions)), { repoRow("alpha", 1) })
 	t.eq(visible.rows(view({}, sessions, { view = "live" })), {})
-	t.eq(visible.lines(view({}, sessions, { view = "live" }))[1], "No agents running\nStart one here, or run omp in any pane")
+	t.eq(visible.lines(view({}, sessions, { view = "live" })), { "No agent runs. Open Recent to resume a session" })
 end)
 
 t.test("a session a process holds open does not make its folder recent", function()
@@ -157,8 +157,9 @@ t.test("when an agent starts in a recent folder, the folder still shows once", f
 	}
 	t.eq(visible.rows(view(agents, sessions)), { repoRow("alpha", 1) })
 	t.eq(visible.rows(view(agents, sessions, { view = "live" })), {
-		":chev :mi-folder-open alpha 1 [:plus](New tab in this repo)",
-		"●(Working) new",
+		"■ Working 1 busy",
+		"alpha [:plus](New tab in this repo)",
+		":sparkle(Working) new 0s",
 	})
 end)
 

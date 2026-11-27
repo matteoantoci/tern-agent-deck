@@ -460,24 +460,26 @@ function sidebar.sync(cx: WindowCx, front: number?)
 	end
 end
 
--- `tern.now()` when the redraw that folds the next idle agent into "Older" runs; nil when none waits.
-local olderAt: number? = nil
+-- `tern.now()` when the redraw that shows the next change no event announces runs; nil when none waits.
+local dueAt: number? = nil
 
--- An idle agent folds into "Older" a day after its last turn, and no event says so: redraw then.
-local function redrawForOlder(input: viewModel.Input)
-	local due = viewModel.olderDue(input)
+-- A row's time shows another text as the time goes by (`45s` → `46s`), and an idle agent folds into "Older than a
+-- day" a day after its last turn; no event says so: redraw then. The timer fires a moment after the change, so that
+-- the redraw shows it.
+local function redrawWhenDue(input: viewModel.Input)
+	local due = viewModel.redrawDue(input)
 	if not due then
 		return
 	end
-	local ms = due * 1000 + 1000
+	local ms = due + 50
 	local at = input.now + ms
-	if olderAt and olderAt <= at then
+	if dueAt and dueAt <= at then
 		return
 	end
-	olderAt = at
+	dueAt = at
 	tern.timer(ms, function(later: WindowCx?)
-		if olderAt == at then
-			olderAt = nil
+		if dueAt == at then
+			dueAt = nil
 		end
 		if later then
 			sidebar.refresh(later)
@@ -498,7 +500,7 @@ function sidebar.refresh(cx: WindowCx): viewModel.Output
 		return out
 	end
 	if #panes > 0 then
-		redrawForOlder(input)
+		redrawWhenDue(input)
 	end
 	for _, pane in panes do
 		local copy = copies[pane]

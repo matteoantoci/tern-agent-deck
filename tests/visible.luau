@@ -160,8 +160,8 @@ function visible.rows(view: Node): { string }
 	return out
 end
 
--- The kind of a list row (`item`, `on`, `folder`, `fold`, `head`, `info`) and its depth in the tree, from its
--- role `agents.<kind>.<depth>`.
+-- The kind of a list row (`item`, `on`, `head`, `label`, `folder`, `fold`, `info`) and its depth in the tree, from
+-- its role `agents.<kind>.<depth>`.
 local function kindOf(row: Node): (string?, number?)
 	local role = props(row).role
 	if type(role) ~= "string" then
@@ -171,16 +171,58 @@ local function kindOf(row: Node): (string?, number?)
 	return kind, tonumber(depth)
 end
 
---- Like `rows`, without the section heads and folder rows: the agent, subagent, info and Older rows.
+--- Like `rows`, without the zone heads, project labels and folder rows: the agent, subagent, info and Older rows.
 function visible.agentRows(view: Node): { string }
 	local out: { string } = {}
 	for _, row in rowNodes(view) do
 		local kind = kindOf(row)
-		if kind ~= "head" and kind ~= "folder" then
+		if kind ~= "head" and kind ~= "label" and kind ~= "folder" then
 			table.insert(out, line(row))
 		end
 	end
 	return out
+end
+
+-- The Live view's zones (Needs you, Working, Idle): each a block whose first row is its head.
+local ZONE = "agents.zone"
+
+local function zoneNodes(view: Node): { Node }
+	local out: { Node } = {}
+	local function walk(n: Node)
+		if props(n).role == ZONE then
+			table.insert(out, n)
+			return
+		end
+		for _, child in kids(n) do
+			walk(child)
+		end
+	end
+	walk(view)
+	return out
+end
+
+--- The heads of the Live view's zones, in order, one line each.
+function visible.zones(view: Node): { string }
+	local out: { string } = {}
+	for _, zone in zoneNodes(view) do
+		table.insert(out, line(rowNodes(zone)[1]))
+	end
+	return out
+end
+
+--- The rows of the zone whose head shows `name`, its head left out, one line each as `rows` writes them.
+function visible.zone(view: Node, name: string): { string }
+	for _, zone in zoneNodes(view) do
+		local rows = rowNodes(zone)
+		if string.find(line(rows[1]), name, 1, true) then
+			local out: { string } = {}
+			for i = 2, #rows do
+				table.insert(out, line(rows[i]))
+			end
+			return out
+		end
+	end
+	error("no zone shows " .. string.format("%q", name), 2)
 end
 
 --- Like `rows`, each line indented two spaces per level of the tree the row sits at.
@@ -270,32 +312,6 @@ function visible.selected(view: Node): { string }
 	return out
 end
 
--- Whether the state dot of `row` takes Tern's `pulse` effect.
-local function dotPulses(row: Node): boolean
-	for _, child in kids(row) do
-		local p = props(child)
-		if string.match(tostring(p.role), "^agents%.dot%.") and type(p.spans) == "table" then
-			for _, span in p.spans do
-				if type(span) == "table" and span.fx == "pulse" then
-					return true
-				end
-			end
-		end
-	end
-	return false
-end
-
---- The rows whose state dot pulses (a live agent or subagent), one line each.
-function visible.pulsing(view: Node): { string }
-	local out: { string } = {}
-	for _, row in rowNodes(view) do
-		if dotPulses(row) then
-			table.insert(out, line(row))
-		end
-	end
-	return out
-end
-
 -- The span styles that `agents.css` keeps in the mono face; every other text of the canvas is sans.
 local MONO_STYLES = { "path", "mono", "num", "code", "key" }
 
@@ -346,12 +362,19 @@ function visible.click(view: Node, text: string): string?
 	return actions and actions.click
 end
 
--- The state that `role` carries (`agents.dot.<state>` for a state dot, `agents.mark.<state>` for a state icon), or nil.
+-- The state that `role` carries (`agents.glyph.<state>` for a title icon, `agents.square.<state>` for a zone head's
+-- square, `agents.dot.<state>` for a state dot, `agents.mark.<state>` for a state icon), or nil.
+local STATE_PARTS = { glyph = true, square = true, dot = true, mark = true }
+
 local function stateOf(role: any): string?
 	if type(role) ~= "string" then
 		return nil
 	end
-	return string.match(role, "^agents%.dot%.(%a+)$") or string.match(role, "^agents%.mark%.(%a+)$")
+	local part, state = string.match(role, "^agents%.(%a+)%.(%a+)$")
+	if part and STATE_PARTS[part] then
+		return state
+	end
+	return nil
 end
 
 --- The state of the first state dot or state icon in the row that shows `text` (`working`, `done`, …), or nil.
@@ -467,20 +490,11 @@ function visible.find(view: Node, kind: string): Node?
 	return nil
 end
 
---- What the dropdown `menu` node of `view` offers when clicked, one line per item as `menu` writes them.
-function visible.dropdown(view: Node): { string }
-	local node = visible.find(view, "menu")
-	if not node then
-		error("the view has no dropdown menu", 2)
-	end
-	return menuLines(props(node).items or {})
-end
-
---- The action a click on the button with tooltip `title` anywhere in `view` sends.
+--- The action a click on the button with tooltip or label `title` anywhere in `view` sends.
 function visible.press(view: Node, title: string): string?
 	local function walk(n: Node): string?
 		local p = props(n)
-		if n.k == "button" and p.title == title then
+		if n.k == "button" and (p.title == title or p.text == title) then
 			return p.actions and p.actions.click
 		end
 		for _, child in kids(n) do
@@ -494,12 +508,12 @@ function visible.press(view: Node, title: string): string?
 	return walk(view)
 end
 
---- The tooltip of the view button drawn as the one shown (role `agents.view.on`), or nil.
+--- The label of the view button drawn as the one shown (role `agents.view.on`), or nil.
 function visible.shownView(view: Node): string?
 	local function walk(n: Node): string?
 		local p = props(n)
 		if p.role == "agents.view.on" then
-			return p.title
+			return p.text
 		end
 		for _, child in kids(n) do
 			local found = walk(child)
@@ -510,26 +524,6 @@ function visible.shownView(view: Node): string?
 		return nil
 	end
 	return walk(view)
-end
-
---- Whether the row that shows `text` draws that text dimmed.
-function visible.dimmed(view: Node, text: string): boolean
-	local found = false
-	local function walk(n: Node)
-		local spans = props(n).spans
-		if type(spans) == "table" then
-			for _, span in spans do
-				if type(span) == "table" and type(span.t) == "string" and string.find(span.t, text, 1, true) then
-					found = found or string.find(" " .. tostring(span.s) .. " ", " dim ", 1, true) ~= nil
-				end
-			end
-		end
-		for _, child in kids(n) do
-			walk(child)
-		end
-	end
-	walk(findRow(view, text))
-	return found
 end
 
 --- Whether the row that shows `text` draws that text as its secondary part: in the detail (role `agents.detail`),

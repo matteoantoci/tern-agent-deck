@@ -107,7 +107,7 @@ t.test("an agent revived after a done sibling shows as running", function()
 		now = 0,
 		subagents = { [7] = subs :: any },
 	}).view
-	t.eq(visible.agentRows(view), { "●(Idle) Lead", "●(Running) Scan", ":check 1 subagent done" })
+	t.eq(visible.agentRows(view), { ":sparkle(Idle) Lead", "●(Running) Scan", ":check 1 subagent done" })
 end)
 
 t.test("the main agent's helper cards and cards of other items are no subagents", function()

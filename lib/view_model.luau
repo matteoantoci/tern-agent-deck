@@ -74,8 +74,8 @@ export type Session = {
 	open: boolean?,
 }
 
---- What the sidebar lists: the live agents (Needs you, Pinned, the folders with their agents and subagents) or the
---- closed sessions (the folders with closed sessions, newest first).
+--- What the sidebar lists: the live agents (the zones Needs you, Working and Idle, with their agents grouped by
+--- project) or the closed sessions (the folders with closed sessions, newest first).
 export type View = "live" | "recent"
 
 export type Input = {
@@ -90,10 +90,8 @@ export type Input = {
 	subagents: { [number]: subagents.Subagents }?,
 	--- The pinned agents, in the order the user pinned them.
 	pins: { Pin }?,
-	--- The keys of the groups whose "Older" row is open.
-	olderOpen: { [string]: boolean }?,
-	--- The keys of the folder sections the user folded in the Live view: they show only their folder row.
-	folded: { [string]: boolean }?,
+	--- Whether the Idle zone shows its agents that idled for a day or more ("Older than a day" is open).
+	olderOpen: boolean?,
 	--- The omp sessions the reader found, in any order; nil before the first read.
 	sessions: { Session }?,
 	--- The keys of the folders whose closed sessions show in the Recent view.
@@ -102,7 +100,8 @@ export type Input = {
 	recentAll: boolean?,
 	--- The view the strip shows chosen; Live when nil.
 	view: View?,
-	--- The pane the user last focused outside the sidebar: its agent's row is drawn selected.
+	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent, and its
+	--- project comes first in every zone.
 	focused: number?,
 	--- The omp id of the subagent each pane's omp shows in its view ("Viewing <name>"), by pane: while the focused
 	--- pane shows one, that subagent's row is drawn selected instead of its agent's.
@@ -127,19 +126,20 @@ export type Output = {
 	waiting: { number },
 }
 
--- Each state reaches the canvas as data: the role of its dot or icon ends in the state (`agents.dot.working`,
--- `agents.mark.done`), and `agents.css` gives each state its Tern color: working and running `--live`, waiting `--warn`,
--- done `--ok`, failed `--bad`, idle `--t3`, exited, stopped and not live `--t4`. No state takes a Tern tone, so the
--- accent marks only the selected row. A hollow dot marks a row that is not updated live: an exited pinned agent, a
--- closed session, or a subagent the sidebar cannot read while omp shows another one (it may still run). A working dot
--- pulses, as the dot of a running subagent in omp's own view does.
+-- Each state reaches the canvas as data: the role of its icon, dot or square ends in the state (`agents.glyph.working`,
+-- `agents.mark.done`, `agents.square.idle`), and `agents.css` gives each state its Tern color: working and running
+-- `--live`, waiting `--warn`, done `--ok`, failed `--bad`, idle `--t3`, exited, stopped and not live `--t4`. No state
+-- takes a Tern tone, so the accent marks only this tab's agent. A hollow dot marks a row that is not updated live: a
+-- closed session, or a subagent the sidebar cannot read while omp shows another one (it may still run). Only a
+-- working agent's title icon moves: `agents.css` fades it slowly.
 type State = "working" | "waiting" | "idle" | "exited" | "running" | "done" | "failed" | "stopped" | "frozen"
 
-local DOT: { [AgentState]: { state: State, label: string, hollow: boolean?, pulse: boolean? } } = {
-	working = { state = "working", label = "Working", pulse = true },
-	waiting_input = { state = "waiting", label = "Waiting for you" },
-	idle = { state = "idle", label = "Idle" },
-	exited = { state = "exited", label = "Exited", hollow = true },
+-- What the hover card says each agent state is.
+local LABEL: { [AgentState]: string } = {
+	working = "Working",
+	waiting_input = "Waiting for you",
+	idle = "Idle",
+	exited = "Exited",
 }
 
 -- `text` cut to at most `bytes` bytes at the start of a UTF-8 character, with `…`; whole when it fits.
@@ -158,6 +158,8 @@ end
 -- Context every row reads: the time, how many agents share each tab, and the focused pane.
 type Shared = {
 	now: number,
+	--- `os.time()`, for the age of idle and waiting agents; nil when unknown.
+	time: number?,
 	perTab: { [number]: number },
 	focused: number?,
 	viewing: { [number]: string },
@@ -193,20 +195,33 @@ local function shownTitle(title: string?): string?
 	return nonEmpty(title)
 end
 
--- The agent's own name: the pane title with omp's icon, else the folder name.
-local function ownName(agent: Agent): string
-	return shownTitle(agent.title)
-		or (agent.cwd and nonEmpty(string.match(agent.cwd, "([^/]+)/*$")))
-		or "Agent"
+-- The last part of a working directory, or nil.
+local function folderTail(cwd: string?): string?
+	return cwd and nonEmpty(string.match(cwd, "([^/]+)/*$"))
 end
 
--- The tab name the user set, when the agent is alone in its tab; else the pane title; else the folder name.
-local function name(agent: Agent, shared: Shared): string
+-- The agent's own name: the pane title with omp's icon, else the folder name.
+local function ownName(agent: Agent): string
+	return shownTitle(agent.title) or folderTail(agent.cwd) or "Agent"
+end
+
+-- Whether the user named the agent's tab and the agent is alone in it: the tab name then names the agent.
+local function tabNamed(agent: Agent, shared: Shared): string?
 	local tabName = nonEmpty(agent.tabName)
 	if tabName and agent.tab and shared.perTab[agent.tab] == 1 then
 		return tabName
 	end
-	return ownName(agent)
+	return nil
+end
+
+-- The tab name the user set, when the agent is alone in its tab; else the pane title; else the folder name.
+local function name(agent: Agent, shared: Shared): string
+	return tabNamed(agent, shared) or ownName(agent)
+end
+
+-- The text of an agent's row: as `name`, without omp's icon (the row draws it apart, in the state's color).
+local function rowTitle(agent: Agent, shared: Shared): string
+	return tabNamed(agent, shared) or plainTitle(agent.title) or folderTail(agent.cwd) or "Agent"
 end
 
 -- The model name without the thinking-level glyph (a trailing private-use character) and spaces.
@@ -277,44 +292,47 @@ end
 
 local MINUTE, HOUR, DAY = 60, 60 * 60, 24 * 60 * 60
 
--- The roles `agents.css` styles; the sidebar copies the look of Tern's Files pane. The root sets the canvas in the
--- sans face; the chrome holds the head (the glyph, the title, the tools) and the view strip. Each list row has the
--- role `agents.<kind>.<depth>` (see `rowRole`); its parts: the chevron, the 14 px icon column (a toned icon, a state
--- dot, or an untoned glyph in the icon color: the head's and the folder rows'), the name and the dim detail (cut with
--- an ellipsis in CSS, so that Tern adds no tooltip of its own under a row's hover card), the count a folder row shows
--- on hover and the one a head always shows, the controls that show on hover, and the bell at a waiting agent row's
--- right end.
+-- The roles `agents.css` styles. The root sets the canvas in the sans face; the chrome holds the Live/Recent switch;
+-- the body holds the zones (`agents.zone`), each a head row and its project groups (`agents.project`), each a label
+-- row and its agent rows. Each list row has the role `agents.<kind>.<depth>` (see `rowRole`). A row's parts: the
+-- title icon in its state's color (`agents.glyph.<state>`), the name (cut with an ellipsis in CSS, so that Tern adds
+-- no tooltip of its own under a row's hover card), the time, and the controls that show on hover. A zone head has a
+-- square in its state's color (`agents.square.<state>`) and its status.
 local ROLE = {
 	root = "agents.root",
 	chrome = "agents.chrome",
-	top = "agents.top",
-	glyph = "agents.glyph",
-	title = "agents.title",
-	tool = "agents.tool",
-	hide = "agents.hide",
 	views = "agents.views",
 	view = "agents.view",
 	viewOn = "agents.view.on",
 	body = "agents.body",
+	zone = "agents.zone",
+	project = "agents.project",
+	older = "agents.older",
+	mine = "agents.mine",
+	calm = "agents.calm",
 	chev = "agents.chev",
 	icon = "agents.icon",
+	glyph = "agents.glyph.",
+	square = "agents.square.",
 	dot = "agents.dot.",
 	mark = "agents.mark.",
 	name = "agents.name",
 	detail = "agents.detail",
+	rule = "agents.rule",
+	time = "agents.time",
 	count = "agents.count",
 	meta = "agents.meta",
 	hover = "agents.hover",
-	status = "agents.status",
 }
 
--- A list row's kind: `item` (a clickable row: an agent, a subagent, a session, "N more"), `on` (the focused
--- agent's row, drawn selected), `folder` (a folder row with its chevron), `fold` (Older: a chevron and a label),
--- `head` (Needs you, Pinned) and `info` (the done and incomplete lines, which take no click).
-type Kind = "item" | "on" | "folder" | "fold" | "head" | "info"
+-- A list row's kind: `item` (a clickable row: an agent, a subagent, a session, "N more"), `on` (this tab's agent's
+-- row, or the subagent its omp shows), `head` (a zone's head), `label` (a project's label), `folder` (a Recent folder
+-- row with its chevron), `fold` (Older than a day: a chevron and a label) and `info` (the done and incomplete lines,
+-- which take no click).
+type Kind = "item" | "on" | "head" | "label" | "folder" | "fold" | "info"
 
--- `agents.<kind>.<depth>`: the CSS indents a row by its depth (depth 1 under its folder's glyph, any deeper one
--- 10 px step more) and draws the guide line.
+-- `agents.<kind>.<depth>`: depth 0 for the rows of a zone, one more per level below an agent; the CSS indents a row
+-- by its depth.
 local function rowRole(kind: Kind, depth: number): string
 	return "agents." .. kind .. "." .. tostring(depth)
 end
@@ -334,27 +352,65 @@ local function nameNode(text: string, style: string?, hasDetail: boolean?): Node
 	return { k = "text", p = p }
 end
 
--- The secondary part after a name (a subagent's role and parent, a waiting agent's folder): plain text, so that
--- `agents.css` draws it dimmer and smaller than the name; it takes the free room and is cut first when the row is
--- narrow.
+-- The secondary part after a name (a subagent's role and parent): plain text, so that `agents.css` draws it dimmer
+-- and smaller than the name; it takes the free room and is cut first when the row is narrow.
 local function detailNode(text: string): Node
 	return { k = "text", p = { text = text, role = ROLE.detail, grow = 1, basis = 0 } }
 end
 
--- A state dot in the 14 px icon column: filled, or hollow for a row that is not updated live. A live dot takes Tern's
--- `pulse` effect (opacity 1 → 0.45 over 1.6 s), the look of a running subagent's dot in omp's own view; Tern stops it
--- under reduced motion and while the pane is hidden.
-local function dotNode(state: State, label: string, hollow: boolean?, pulse: boolean?): Node
-	local span: { [string]: string } = { t = if hollow then "○" else "●" }
-	if pulse then
-		span.fx = "pulse"
-	end
-	return { k = "text", p = { spans = { span }, aria = label, role = ROLE.dot .. state } }
+-- A state dot in the icon column: filled, or hollow for a row that is not updated live.
+local function dotNode(state: State, label: string, hollow: boolean?): Node
+	return { k = "text", p = { spans = { { t = if hollow then "○" else "●" } }, aria = label, role = ROLE.dot .. state } }
 end
 
--- An icon in the 14 px icon column that shows a state, in that state's color.
+-- An icon in the icon column that shows a state, in that state's color.
 local function markNode(icon: string, state: State): Node
 	return { k = "icon", p = { name = icon, role = ROLE.mark .. state } }
+end
+
+-- A small square in a state's color, as a zone head shows it; `agents.css` draws the square.
+local function squareNode(state: State): Node
+	return { k = "text", p = { text = "■", wrap = "none", role = ROLE.square .. state } }
+end
+
+-- Tern's icon for an agent whose title has no omp icon (an agent that is not omp, or not titled yet). Tern ships no
+-- icon named "agent"; `sparkle` is the one its aliases give a model.
+local AGENT_ICON = "sparkle"
+
+-- The icon character omp puts at the start of a title, or nil when the title has none or no text follows it.
+local function titleGlyph(title: string?): string?
+	if type(title) ~= "string" or not plainTitle(title) then
+		return nil
+	end
+	return string.match(title, "^([\128-\255]+)%s")
+end
+
+-- A row's title icon in the color of `state`: omp's icon character from `title`, else Tern's agent icon. `label`
+-- names the state for a screen reader.
+local function titleIcon(title: string?, state: State, label: string): Node
+	local glyph = titleGlyph(title)
+	if glyph then
+		return { k = "text", p = { text = glyph, wrap = "none", aria = label, role = ROLE.glyph .. state } }
+	end
+	return { k = "icon", p = { name = AGENT_ICON, aria = label, role = ROLE.glyph .. state } }
+end
+
+-- `seconds` in its largest whole unit, the one time format of the sidebar: `45s`, `4m`, `3h`, `2d`.
+local function duration(seconds: number): string
+	local s = math.max(0, math.floor(seconds))
+	if s < MINUTE then
+		return string.format("%ds", s)
+	elseif s < HOUR then
+		return string.format("%dm", s // MINUTE)
+	elseif s < DAY then
+		return string.format("%dh", s // HOUR)
+	end
+	return string.format("%dd", s // DAY)
+end
+
+-- A row's time, neutral (`agents.css` sets it in the mono face with tabular figures).
+local function timeNode(seconds: number): Node
+	return { k = "text", p = { text = duration(seconds), wrap = "none", role = ROLE.time } }
 end
 
 -- A hover card's facts: an aligned grid of muted labels and their values, as `tern.ui.kv` builds it.
@@ -439,36 +495,38 @@ local function modelRoute(model: string?): string?
 	return nonEmpty(route)
 end
 
--- The mark at the right end of an agent row: the bell while it waits for the user, in neutral (the state dot
--- carries the color). A working agent has no end mark: its pulsing dot already says so.
-local function endMark(state: AgentState): Node?
-	if state == "waiting_input" then
-		return { k = "icon", p = { name = "bell", role = ROLE.status } }
+-- How an agent's row shows its state: the state of its title icon, the name of that state, and the time the row
+-- shows in seconds (the turn timer while it works; while it waits, the wait; else the time since its last turn),
+-- nil when unknown.
+type Shown = { state: State, label: string, seconds: number? }
+
+local function shownState(agent: Agent, shared: Shared): Shown
+	if agent.state == "working" then
+		return { state = "working", label = "Working", seconds = math.max(0, shared.now - (agent.workingSince or shared.now)) / 1000 }
 	end
-	return nil
+	local time, activeAt = shared.time, agent.activeAt
+	local since = if time and activeAt then math.max(0, time - activeAt) else nil
+	if agent.state == "waiting_input" then
+		return { state = "waiting", label = "Waiting for you", seconds = since }
+	elseif agent.state == "exited" then
+		return { state = "stopped", label = "Stopped", seconds = since }
+	end
+	return { state = "idle", label = "Idle", seconds = since }
 end
 
--- An agent's row at `depth` in the tree: the state dot, the name and, when `place` is given, the repo's folder name
--- after it (the Needs you strip shows where each agent works), then the bell of a waiting agent. A row carries no
--- tooltip: its hover card holds every fact: the state and the live turn timer, the repo, the model, the effort and
--- the last message (or its summary).
-local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number, place: { name: string, path: string }?): Node
-	local dot = DOT[agent.state]
-	local shownName = name(agent, shared)
-	local children: { Node } = {
-		dotNode(dot.state, dot.label, dot.hollow, dot.pulse),
-		-- An exited agent shows only while pinned, dimmed.
-		nameNode(shownName, if agent.state == "exited" then "dim" else nil, place ~= nil),
-	}
+-- An agent's row at `depth`: its title icon in the state's color, its title, and its time; a stopped agent's row adds
+-- a resume icon that shows on hover. A row carries no tooltip: its hover card holds every fact: the state and the
+-- live turn timer, the model, the effort and the last message (or its summary).
+local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number): Node
+	local shown = shownState(agent, shared)
+	local children: { Node } = { titleIcon(agent.title, shown.state, shown.label), nameNode(rowTitle(agent, shared)) }
+	if shown.seconds then
+		table.insert(children, timeNode(shown.seconds))
+	end
+	if agent.state == "exited" then
+		table.insert(children, { k = "icon", p = { name = "play", role = ROLE.hover } })
+	end
 	local facts: Facts = {}
-	if place then
-		table.insert(children, detailNode(place.name))
-		table.insert(facts, { k = "Repo", v = place.path })
-	end
-	local mark = endMark(agent.state)
-	if mark then
-		table.insert(children, mark)
-	end
 	-- omp's session names the model as `provider/model`; an agent without one (not omp) shows Tern's model name, in
 	-- lower case as the routes are.
 	local display = plainModel(agent.model)
@@ -487,7 +545,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 		table.insert(rest, messageNode(message, agent.summary, agent.summarizing))
 	end
 	local pane = string.format("%.0f", agent.pane)
-	-- An exited agent (it shows only while pinned) has no program to focus: a click resumes its session.
+	-- A stopped agent (it shows only while pinned) has no program to focus: a click resumes its session.
 	local click = if agent.state == "exited" and agent.sessionFile
 		then "resume=" .. agent.sessionFile
 		else "focus=" .. pane
@@ -496,7 +554,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 		gap = "sm",
 		role = rowRole(if shared.focused == agent.pane then "on" else "item", depth),
 		actions = { click = click, menu = menu(agent, pane, pinned, shared.viewing[agent.pane] ~= nil) },
-		hovercard = card(cardHead(shownName, dot.label, age), facts, rest),
+		hovercard = card(cardHead(name(agent, shared), LABEL[agent.state], age), facts, rest),
 	}
 	return { k = "row", p = props, c = children }
 end
@@ -635,10 +693,10 @@ function viewModel.groups(agents: { Agent }, home: string?): { Group }
 	return groups
 end
 
--- The Files pane's folder glyphs: Material Icon Theme's filled folders.
+-- The Files pane's folder glyphs, which a Recent folder row shows: Material Icon Theme's filled folders.
 local FOLDER, FOLDER_OPEN = "mi-folder", "mi-folder-open"
 
--- An icon in the 14 px icon column.
+-- An icon in the icon column.
 local function iconNode(icon: string, tone: string?): Node
 	return { k = "icon", p = { name = icon, tone = tone, role = ROLE.icon } }
 end
@@ -648,33 +706,16 @@ local function chevron(open: boolean): Node
 	return { k = "icon", p = { name = if open then "chev" else "chev-r", role = ROLE.chev } }
 end
 
--- A count in the Files pane's small mono digits: always shown (`meta`), or only while the pointer is on its row
--- (`count`).
+-- A count in small mono digits: always shown (`meta`), or only while the pointer is on its row (`count`).
 local function countNode(count: number, role: string): Node
 	return { k = "text", p = { spans = { { t = tostring(count), s = "muted" } }, wrap = "none", role = role } }
 end
 
--- A section head (Needs you): its state icon, its label and the count of its rows. It takes no click.
-local function head(icon: string, state: State, label: string, count: number): Node
-	local children: { Node } = { markNode(icon, state), nameNode(label), countNode(count, ROLE.meta) }
-	return { k = "row", p = { key = "head", gap = "sm", role = rowRole("head", 0) }, c = children }
-end
-
--- A row that opens and closes the rows under it and is no folder (Older): the chevron, its label and its count. A
--- click on it sends `click`.
+-- A row that opens and closes the rows under it and is no folder (Older than a day): the chevron, its label and its
+-- count. A click on it sends `click`.
 local function foldRow(key: string, label: string, count: number, open: boolean, click: string, depth: number): Node
-	local children: { Node } = { chevron(open), nameNode(label, "muted"), countNode(count, ROLE.meta) }
+	local children: { Node } = { chevron(open), nameNode(label), countNode(count, ROLE.meta) }
 	local p: { [string]: any } = { key = key, gap = "sm", role = rowRole("fold", depth), actions = { click = click } }
-	return { k = "row", p = p, c = children }
-end
-
--- The Pinned head: drawn as a folder row (the chevron, the pin in the folder glyph's column, the label and the
--- count), so that the user folds Pinned as a folder; a click sends `fold=pinned`.
-local PINNED_KEY = "pinned"
-local function pinnedHead(count: number, open: boolean): Node
-	local children: { Node } = { chevron(open), iconNode("pin", "muted"), nameNode("Pinned"), countNode(count, ROLE.meta) }
-	local p: { [string]: any } =
-		{ key = "head", gap = "sm", role = rowRole("folder", 0), actions = { click = "fold=" .. PINNED_KEY } }
 	return { k = "row", p = p, c = children }
 end
 
@@ -693,13 +734,22 @@ local function plusButton(folder: string, repo: boolean): Node
 	}
 end
 
--- What a folder row shows: its key and the action of a click on it, the folder (nil for agents with none) and its
--- name, whether it is a repo, whether it shows its rows, the count of its rows, its depth, and the lines its hover
--- card adds after the short path.
+-- The hover card of a row that stands for `folder`: its short path, then `extra`.
+local function folderCard(folder: string, home: string?, extra: { Node }?): Node
+	local lines: { Node } = { { k = "text", p = { spans = { { t = viewModel.shortPath(folder, home), s = "path" } } } } }
+	for _, line in extra or ({} :: { Node }) do
+		table.insert(lines, line)
+	end
+	return { k = "col", p = { gap = "xs" }, c = lines }
+end
+
+-- What a folder row shows: its key and the action of a click on it, the folder and its name, whether it is a repo,
+-- whether it shows its rows, the count of its rows, its depth, and the lines its hover card adds after the short
+-- path.
 type FolderSpec = {
 	key: string,
 	click: string,
-	folder: string?,
+	folder: string,
 	name: string,
 	repo: boolean,
 	open: boolean,
@@ -709,31 +759,24 @@ type FolderSpec = {
 	extra: { Node }?,
 }
 
--- A folder row like the Files pane's: the chevron (open while it shows its rows), the folder glyph, the folder's
--- name, and, while the pointer is on it, the count of its rows and the `+` that starts an agent there. Its hover card
--- gives the folder's short path.
+-- A Recent folder row: the chevron (open while it shows its rows), the folder glyph, the folder's name, and, while
+-- the pointer is on it, the count of its rows and the `+` that starts an agent there. Its hover card gives the
+-- folder's short path.
 local function folderRow(spec: FolderSpec): Node
 	local children: { Node } = {
 		chevron(spec.open),
-		{ k = "icon", p = { name = if spec.open then FOLDER_OPEN else FOLDER, role = ROLE.glyph } },
+		iconNode(if spec.open then FOLDER_OPEN else FOLDER),
 		nameNode(spec.name),
 		countNode(spec.count, ROLE.count),
+		plusButton(spec.folder, spec.repo),
 	}
 	local p: { [string]: any } = {
 		key = spec.key,
 		gap = "sm",
 		role = rowRole("folder", spec.depth),
 		actions = { click = spec.click },
+		hovercard = folderCard(spec.folder, spec.home, spec.extra),
 	}
-	local folder = spec.folder
-	if folder then
-		table.insert(children, plusButton(folder, spec.repo))
-		local card: { Node } = { { k = "text", p = { spans = { { t = viewModel.shortPath(folder, spec.home), s = "path" } } } } }
-		for _, line in spec.extra or ({} :: { Node }) do
-			table.insert(card, line)
-		end
-		p.hovercard = { k = "col", p = { gap = "xs" }, c = card }
-	end
 	return { k = "row", p = p, c = children }
 end
 
@@ -741,6 +784,23 @@ end
 local function isRepo(group: Group): boolean
 	local first = group.agents[1]
 	return first ~= nil and first.repo ~= nil
+end
+
+-- A project's label in a zone: its name in muted text, a light rule to the right edge and, while the pointer is on
+-- it, the `+` that starts an agent there. Its hover card gives the folder's short path. Agents with no folder get
+-- the label "No folder", with neither.
+local function projectLabel(group: Group, home: string?): Node
+	local children: { Node } = {
+		{ k = "text", p = { text = group.name, role = ROLE.name } },
+		{ k = "rule", p = { role = ROLE.rule, grow = 1 } },
+	}
+	local p: { [string]: any } = { key = "head", gap = "sm", role = rowRole("label", 0) }
+	local folder = group.folder
+	if folder then
+		table.insert(children, plusButton(folder, isRepo(group)))
+		p.hovercard = folderCard(folder, home)
+	end
+	return { k = "row", p = p, c = children }
 end
 
 -- omp renders nested subagents down to its `MAX_NESTED_TASK_RENDER_DEPTH` (8), counting the first level as 0: the
@@ -803,7 +863,7 @@ local function subRow(
 	end
 	local label = if frozen then "Not live" elseif sub.waiting then "Waiting on its subagents" else "Running"
 	local dotState: State = if frozen then "frozen" elseif sub.waiting then "waiting" else "running"
-	local children: { Node } = { dotNode(dotState, label, frozen, not frozen), nameNode(own, nil, #detail > 0) }
+	local children: { Node } = { dotNode(dotState, label, frozen), nameNode(own, nil, #detail > 0) }
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
 	end
@@ -887,8 +947,10 @@ local function running(subs: subagents.Subagents): boolean
 	return false
 end
 
--- The agent's row at `depth`, wrapped while it works or any of its subagents runs with the rows of its running subagents at every nesting level,
--- one line that counts the finished ones by result, and a warning when Tern cut the read, all one level deeper.
+-- The agent's row at `depth`, wrapped while it works or any of its subagents runs with the rows of its running
+-- subagents at every nesting level, one line that counts the finished ones by result, and a warning when Tern cut
+-- the read, all one level deeper. This tab's agent's rows are wrapped in one block, which `agents.css` draws with
+-- the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	local main = row(agent, shared, pinned, depth)
 	if not subs or not (agent.state == "working" or (agent.state ~= "exited" and running(subs))) then
@@ -935,10 +997,15 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	if #lines == 1 then
 		return main
 	end
-	return { k = "col", p = { key = "tree-" .. pane, gap = "none" }, c = lines }
+	local p: { [string]: any } = { key = "tree-" .. pane, gap = "none" }
+	if shared.focused == agent.pane then
+		p.role = ROLE.mine
+	end
+	return { k = "col", p = p, c = lines }
 end
 
--- An idle agent whose last turn ended this long ago (in seconds) folds into its group's "Older" row.
+-- An idle agent whose last turn ended this long ago (in seconds) folds into "Older than a day", unless it is pinned
+-- or this tab's agent.
 local OLDER_AFTER = DAY
 
 local function isOlder(agent: Agent, time: number?): boolean
@@ -946,23 +1013,11 @@ local function isOlder(agent: Agent, time: number?): boolean
 	return agent.state == "idle" and time ~= nil and activeAt ~= nil and time - activeAt >= OLDER_AFTER
 end
 
---- The seconds until the next idle agent folds into "Older", so that the sidebar redraws then; nil when none will.
-function viewModel.olderDue(input: Input): number?
-	local time = input.time
-	if time == nil then
-		return nil
-	end
-	local due: number? = nil
-	for _, agent in input.agents do
-		local activeAt = agent.activeAt
-		if agent.state == "idle" and activeAt ~= nil and not isOlder(agent, time) then
-			local left = activeAt + OLDER_AFTER - time
-			if due == nil or left < due then
-				due = left
-			end
-		end
-	end
-	return due
+-- The milliseconds after `ms` until a time of `ms` milliseconds shows another text (`45s` → `46s`, `4m` → `5m`).
+local function untilChange(ms: number): number
+	local seconds = ms / 1000
+	local unit = if seconds < MINUTE then 1 elseif seconds < HOUR then MINUTE elseif seconds < DAY then HOUR else DAY
+	return (unit - seconds % unit) * 1000
 end
 
 -- Which agent each pin names, by the pin's index: the running agent that has the pin's session file open, else the
@@ -1032,7 +1087,7 @@ function viewModel.resolvePins(agents: { Agent }, pins: { Pin }): { Pin }
 	return out
 end
 
---- The index of the pin that names the agent in `pane`, as the Pinned section matches them; nil when none does.
+--- The index of the pin that names the agent in `pane`, as the Live view matches them; nil when none does.
 function viewModel.pinOf(agents: { Agent }, pins: { Pin }, pane: number): number?
 	for i, agent in matchPins(agents, pins) do
 		if agent.pane == pane then
@@ -1042,28 +1097,44 @@ function viewModel.pinOf(agents: { Agent }, pins: { Pin }, pane: number): number
 	return nil
 end
 
+--- The milliseconds until the view shows something else with no event to say so (a row's time shows another text,
+--- or an idle agent folds into "Older than a day"), so that the sidebar redraws then; nil when nothing will.
+function viewModel.redrawDue(input: Input): number?
+	local due: number? = nil
+	local function soon(ms: number)
+		if due == nil or ms < due then
+			due = ms
+		end
+	end
+	local pinned: { [number]: boolean } = {}
+	for _, agent in matchPins(input.agents, input.pins or {}) do
+		pinned[agent.pane] = true
+	end
+	local time = input.time
+	for _, agent in input.agents do
+		local activeAt = agent.activeAt
+		if agent.state == "working" then
+			soon(untilChange(math.max(0, input.now - (agent.workingSince or input.now))))
+		elseif time and activeAt and (agent.state ~= "exited" or pinned[agent.pane]) then
+			soon(untilChange(math.max(0, time - activeAt) * 1000))
+			local exempt = pinned[agent.pane] or agent.pane == input.focused
+			if agent.state == "idle" and not exempt and not isOlder(agent, time) then
+				soon((activeAt + OLDER_AFTER - time) * 1000)
+			end
+		end
+	end
+	return due
+end
+
 -- A folder lists at most this many closed sessions.
 local RECENT_SESSIONS = 5
-
--- How long ago `seconds` was, in the largest whole unit: `now`, `5m`, `2h`, `3d`.
-local function ago(seconds: number): string
-	if seconds < MINUTE then
-		return "now"
-	elseif seconds < HOUR then
-		return string.format("%dm", seconds // MINUTE)
-	elseif seconds < DAY then
-		return string.format("%dh", seconds // HOUR)
-	end
-	return string.format("%dd", seconds // DAY)
-end
 
 -- A closed session at `depth`: a hollow dot, its title with omp's icon (or "Untitled") and, at the right end, how
 -- long ago it was last written. A click resumes it in a new tab; a right-click copies its ID or path.
 local function sessionRow(session: Session, time: number?, depth: number): Node
 	local children: { Node } = { dotNode("exited", "Closed", true), nameNode(shownTitle(session.title) or "Untitled") }
 	if time then
-		local age = ago(math.max(0, time - session.at))
-		table.insert(children, { k = "text", p = { spans = { { t = age, s = "muted" } }, wrap = "none", role = ROLE.meta } })
+		table.insert(children, timeNode(time - session.at))
 	end
 	return {
 		k = "row",
@@ -1079,8 +1150,7 @@ end
 
 -- The hover card line of a Recent folder: how long ago its newest session was written.
 local function lastSession(sessions: { Session }, time: number): Node
-	local when = ago(math.max(0, time - sessions[1].at))
-	return factsNode({ { k = "Last session", v = if when == "now" then "just now" else when .. " ago" } }) :: Node
+	return factsNode({ { k = "Last session", v = duration(time - sessions[1].at) .. " ago" } }) :: Node
 end
 
 local function folderName(folder: string): string
@@ -1267,6 +1337,7 @@ end
 local function context(input: Input): Shared
 	local shared: Shared = {
 		now = input.now,
+		time = input.time,
 		perTab = {},
 		focused = input.focused,
 		viewing = input.viewing or {},
@@ -1305,45 +1376,27 @@ function viewModel.notice(input: Input, pane: number, what: "waiting" | "done" |
 	return nil
 end
 
--- The ⋯ menu of the head: what the palette commands do, from the sidebar.
-local MORE: { any } = {
-	{ id = "new-here", label = "New tab here", icon = "plus" },
-	{ id = "arrange-by-repo", label = "Arrange tabs by project", icon = "folder" },
-	"-",
-	{ id = "toggle-sidebar", label = "Toggle sidebar", icon = "sidebar", keys = { "cmd", "alt", "A" } },
-}
-
--- A quiet icon button of the head or the view strip.
-local function toolButton(icon: string, title: string, role: string, click: string): Node
+-- A button of the Live/Recent switch, drawn as the shown one when it is.
+local function viewButton(label: string, view: View, shown: View): Node
 	return {
 		k = "button",
-		p = { icon = icon, size = "sm", variant = "quiet", title = title, role = role, actions = { click = click } },
+		p = {
+			text = label,
+			size = "sm",
+			variant = "quiet",
+			role = if view == shown then ROLE.viewOn else ROLE.view,
+			actions = { click = "view=" .. view },
+		},
 	}
 end
 
--- The head, as the Files pane's: the glyph, the bold title, the ⋯ menu and the button that hides the sidebar; then
--- the strip of view buttons, the shown one tinted.
+-- The head: only the Live/Recent switch. What the old ⋯ menu did stays in the palette commands.
 local function chrome(view: View): Node
-	local top: { Node } = {
-		{ k = "icon", p = { name = "users", role = ROLE.glyph } },
-		{ k = "text", p = { text = "Agents", role = ROLE.title, grow = 1 } },
-		{
-			k = "menu",
-			p = { icon = "more", title = "More", trigger = "quiet", size = "sm", align = "end", role = ROLE.tool, items = MORE },
-		},
-		toolButton("sidebar", "Hide sidebar", ROLE.hide, "toggle-sidebar"),
-	}
-	local views: { Node } = {
-		toolButton("activity", "Live", if view == "live" then ROLE.viewOn else ROLE.view, "view=live"),
-		toolButton("history", "Recent", if view == "recent" then ROLE.viewOn else ROLE.view, "view=recent"),
-	}
+	local views: { Node } = { viewButton("Live", "live", view), viewButton("Recent", "recent", view) }
 	return {
 		k = "col",
 		p = { key = "chrome", role = ROLE.chrome, gap = "none" },
-		c = {
-			{ k = "row", p = { key = "top", role = ROLE.top, gap = "sm" }, c = top },
-			{ k = "row", p = { key = "views", role = ROLE.views, gap = "xs" }, c = views },
-		},
+		c = { { k = "row", p = { key = "views", role = ROLE.views, gap = "none" }, c = views } },
 	}
 end
 
@@ -1361,137 +1414,210 @@ local function sessionsByFolder(closed: { Session }): { [string]: { Session } }
 	return out
 end
 
--- The Live view: Needs you, Pinned, then each folder's row with its agents (and their subagents) one level under
--- it, the old idle ones under its Older row. An empty state offers a new agent when no agent shows.
+-- A zone of the Live view: its head (the square in its state's color, its name and its status), then `body`.
+local function zone(key: string, state: State, title: string, status: string, body: { Node }): Node
+	local head: Node = {
+		k = "row",
+		p = { key = "head", gap = "sm", role = rowRole("head", 0) },
+		c = { squareNode(state), nameNode(title), { k = "text", p = { text = status, wrap = "none", role = ROLE.meta } } },
+	}
+	table.insert(body, 1, head)
+	return { k = "col", p = { key = key, role = ROLE.zone, gap = "none" }, c = body }
+end
+
+-- The project groups of `agents` (each one a member of a group in `order`) in the order of `order`, each its label
+-- and its agents' entries, the agents sorted by `before`.
+local function projectGroups(
+	order: { Group },
+	agents: { Agent },
+	before: (Agent, Agent) -> boolean,
+	render: (Agent) -> Node,
+	home: string?
+): { Node }
+	local member: { [Agent]: boolean } = {}
+	for _, agent in agents do
+		member[agent] = true
+	end
+	local out: { Node } = {}
+	for _, group in order do
+		local listed: { Agent } = {}
+		for _, agent in group.agents do
+			if member[agent] then
+				table.insert(listed, agent)
+			end
+		end
+		if #listed > 0 then
+			table.sort(listed, before)
+			local nodes: { Node } = { projectLabel(group, home) }
+			for _, agent in listed do
+				table.insert(nodes, render(agent))
+			end
+			table.insert(out, { k = "col", p = { key = group.key, role = ROLE.project, gap = "none" }, c = nodes })
+		end
+	end
+	return out
+end
+
+-- The Live view: the zones Needs you (the waiting agents, the one that has waited longest first), Working and Idle,
+-- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, in one project
+-- order for every zone: this tab's project first, then by name. Inside a project, this tab's agent comes first, then
+-- the pinned agents in pin order, then the others: in Working, the longest turn first; in Idle, the newest turn
+-- first and the stopped pins last. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended
+-- a day ago or more, but for the pinned ones and this tab's, fold under "Older than a day". A calm line shows while
+-- no zone does.
 local function liveBody(input: Input, shared: Shared): { Node }
 	local subs = input.subagents or {}
-	local olderOpen = input.olderOpen or {}
 	local pins: { Pin } = input.pins or {}
 	local matched = matchPins(input.agents, pins)
 	local pinned: { [number]: boolean } = {}
-	for _, agent in matched do
+	local pinIndex: { [Agent]: number } = {}
+	for i, agent in matched do
 		pinned[agent.pane] = true
+		pinIndex[agent] = i
 	end
-	-- A pinned agent shows in Pinned and again in its folder; an exited agent leaves the list unless pinned, and then
-	-- shows only in Pinned.
-	local listed: { Agent } = {}
+
+	local waiting: { Agent } = {}
+	local working: { Agent } = {}
+	local idle: { Agent } = {}
+	local older: { Agent } = {}
+	local shown: { Agent } = {}
+	-- Stopped pins by the row each one shows as, when its pane is gone: the pin's index.
+	local gone: { [Agent]: number } = {}
 	for _, agent in input.agents do
-		if agent.state ~= "exited" then
-			table.insert(listed, agent)
+		if agent.state == "waiting_input" then
+			table.insert(waiting, agent)
+		elseif agent.state == "working" then
+			table.insert(working, agent)
+			table.insert(shown, agent)
+		elseif agent.state == "idle" then
+			local exempt = pinned[agent.pane] or agent.pane == shared.focused
+			table.insert(if not exempt and isOlder(agent, input.time) then older else idle, agent)
+			table.insert(shown, agent)
 		end
+	end
+	-- A pinned agent that stopped: its program exited, or its pane is gone and it shows from what the pin remembers.
+	-- A click resumes its session: the one it reported, else the one the pin remembers, else the newest session of
+	-- its folder with its title (a pin stored before pins kept the session file).
+	local stopped = 0
+	for i, pin in pins do
+		local agent = matched[i]
+		if not agent or agent.state == "exited" then
+			local clone: Agent = if agent
+				then table.clone(agent)
+				else { pane = pin.pane, state = "exited", title = pin.title, cwd = pin.cwd }
+			clone.sessionFile = clone.sessionFile or pin.sessionFile or titledSession(input.sessions, clone.cwd, clone.title)
+			pinIndex[clone] = i
+			if not agent then
+				gone[clone] = i
+			end
+			stopped += 1
+			table.insert(idle, clone)
+			table.insert(shown, clone)
+		end
+	end
+
+	-- One project order for every zone: this tab's project first, then the order of `groups` (by name).
+	local order = viewModel.groups(shown, input.home)
+	for _, agent in input.agents do
+		if agent.pane == shared.focused and agent.state ~= "exited" then
+			local mine = folderOf(agent)
+			for i, group in order do
+				if group.folder == mine then
+					table.insert(order, 1, table.remove(order, i) :: Group)
+					break
+				end
+			end
+		end
+	end
+
+	-- This tab's agent first, then the pins in pin order, then the others.
+	local function rank(a: Agent, b: Agent): boolean?
+		local ma, mb = a.pane == shared.focused and a.state ~= "exited", b.pane == shared.focused and b.state ~= "exited"
+		if ma ~= mb then
+			return ma
+		end
+		local pa, pb = pinIndex[a] or math.huge, pinIndex[b] or math.huge
+		if pa ~= pb then
+			return pa < pb
+		end
+		return nil
+	end
+	local function longestTurn(a: Agent, b: Agent): boolean
+		local ranked = rank(a, b)
+		if ranked ~= nil then
+			return ranked
+		end
+		local sa, sb = a.workingSince or shared.now, b.workingSince or shared.now
+		if sa ~= sb then
+			return sa < sb
+		end
+		return a.pane < b.pane
+	end
+	local function newestTurn(a: Agent, b: Agent): boolean
+		local xa, xb = a.state == "exited", b.state == "exited"
+		if xa ~= xb then
+			return xb
+		end
+		local ranked = rank(a, b)
+		if ranked ~= nil then
+			return ranked
+		end
+		local ta, tb = a.activeAt or math.huge, b.activeAt or math.huge
+		if ta ~= tb then
+			return ta > tb
+		end
+		return a.pane < b.pane
+	end
+	local function render(agent: Agent): Node
+		local index = gone[agent]
+		if not index then
+			return entry(agent, shared, subs[agent.pane], pinIndex[agent] ~= nil, 0)
+		end
+		-- The pin's pane id may name another agent now, so its Unpin names the pin, not the pane; with no session
+		-- file known, a click says the agent is gone.
+		local ghost = row(agent, shared, true, 0)
+		local key = tostring(index)
+		local p = ghost.p :: { [string]: any }
+		p.key = "gone-" .. key
+		p.role = rowRole("item", 0)
+		local items = p.actions.menu :: { { [string]: any } }
+		items[1] = { id = "forget=" .. key, label = "Unpin", icon = "pin" }
+		if not agent.sessionFile then
+			p.actions.click = "gone=" .. key
+		end
+		return ghost
 	end
 
 	local children: { Node } = {}
-	-- Needs you: the waiting agents that are not pinned, which also keep their rows in their folder sections. Each
-	-- names its folder.
-	local strip: { Node } = {}
-	for _, agent in waitOrder(listed) do
-		if pinned[agent.pane] then
-			continue
+	if #waiting > 0 then
+		local rows: { Node } = {}
+		for _, agent in waitOrder(waiting) do
+			table.insert(rows, row(agent, shared, pinned[agent.pane] == true, 0))
 		end
-		local folder = folderOf(agent)
-		local place = folder and { name = folderName(folder), path = viewModel.shortPath(folder, input.home) }
-		table.insert(strip, row(agent, shared, false, 1, place))
+		table.insert(children, zone("zone-needs", "waiting", "Needs you", tostring(#waiting), rows))
 	end
-	if #strip > 0 then
-		table.insert(strip, 1, head("bell", "waiting", "Needs you", #strip))
-		table.insert(children, { k = "col", p = { key = "needs-you", gap = "none" }, c = strip })
+	if #working > 0 then
+		local body = projectGroups(order, working, longestTurn, render, input.home)
+		table.insert(children, zone("zone-working", "working", "Working", #working .. " busy", body))
 	end
-	local folded = input.folded or {}
-	if #pins > 0 then
-		local open = folded[PINNED_KEY] ~= true
-		local section: { Node } = { pinnedHead(#pins, open) }
-		local shownPins: { Pin } = if open then pins else {}
-		for i, pin in shownPins do
-			local agent = matched[i]
-			if agent and agent.state ~= "exited" then
-				table.insert(section, entry(agent, shared, subs[agent.pane], true, 1))
-			else
-				-- The pinned agent stopped: its program exited, or its pane is gone and it shows from what the pin
-				-- remembers. A click resumes its session: the one it reported, else the one the pin remembers, else
-				-- the newest session of its folder with its title (a pin stored before pins kept the session file).
-				local stopped: Agent = if agent
-					then table.clone(agent)
-					else { pane = pin.pane, state = "exited", title = pin.title, cwd = pin.cwd }
-				stopped.sessionFile = stopped.sessionFile
-					or pin.sessionFile
-					or titledSession(input.sessions, stopped.cwd, stopped.title)
-				if agent then
-					table.insert(section, entry(stopped, shared, subs[agent.pane], true, 1))
-				else
-					-- Its pane id may name another agent now, so its Unpin names the pin, not the pane; with no
-					-- session file known, a click says the agent is gone.
-					local ghost = row(stopped, shared, true, 1)
-					local index = tostring(i)
-					local p = ghost.p :: { [string]: any }
-					p.key = "gone-" .. index
-					p.role = rowRole("item", 1)
-					local items = p.actions.menu :: { { [string]: any } }
-					items[1] = { id = "forget=" .. index, label = "Unpin", icon = "pin" }
-					if not stopped.sessionFile then
-						p.actions.click = "gone=" .. index
-					end
-					table.insert(section, ghost)
-				end
+	if #idle + #older > 0 then
+		local body = projectGroups(order, idle, newestTurn, render, input.home)
+		if #older > 0 then
+			local open = input.olderOpen == true
+			table.insert(body, foldRow("older", "Older than a day", #older, open, "older", 0))
+			if open then
+				local groups = projectGroups(order, older, newestTurn, render, input.home)
+				table.insert(body, { k = "col", p = { key = "older-list", role = ROLE.older, gap = "none" }, c = groups })
 			end
 		end
-		table.insert(children, { k = "col", p = { key = "pinned", gap = "none" }, c = section })
+		local status = tostring(#idle + #older) .. (if stopped > 0 then string.format(" · %d stopped", stopped) else "")
+		table.insert(children, zone("zone-idle", "idle", "Idle", status, body))
 	end
-
-	local groups = viewModel.groups(listed, input.home)
-	if #pins == 0 and #groups == 0 then
-		local start: Node = {
-			k = "button",
-			p = { text = "New tab here", icon = "plus", size = "sm", actions = { click = "new-here" } },
-		}
+	if #children == 0 then
 		table.insert(children, {
-			k = "empty",
-			p = {
-				key = "empty",
-				icon = "terminal",
-				title = "No agents running",
-				text = "Start one here, or run omp in any pane",
-			},
-			c = { start },
+			k = "text",
+			p = { key = "calm", role = ROLE.calm, text = "No agent runs. Open Recent to resume a session" },
 		})
-	end
-	-- Each folder's section: its folder row, then, unless the user folded it, the agents in start order and the
-	-- "Older" row with, while it is open, the old idle agents one level under it.
-	for _, group in groups do
-		local open = folded[group.key] ~= true
-		local section: { Node } = {
-			folderRow({
-				key = "head",
-				click = "fold=" .. group.key,
-				folder = group.folder,
-				name = group.name,
-				repo = isRepo(group),
-				open = open,
-				count = #group.agents,
-				depth = 0,
-				home = input.home,
-			}),
-		}
-		if open then
-			local older: { Agent } = {}
-			for _, agent in group.agents do
-				if isOlder(agent, input.time) then
-					table.insert(older, agent)
-				else
-					table.insert(section, entry(agent, shared, subs[agent.pane], pinned[agent.pane] == true, 1))
-				end
-			end
-			if #older > 0 then
-				local olderShown = olderOpen[group.key] == true
-				table.insert(section, foldRow("older", "Older", #older, olderShown, "older=" .. group.key, 1))
-				if olderShown then
-					for _, agent in older do
-						table.insert(section, entry(agent, shared, subs[agent.pane], pinned[agent.pane] == true, 2))
-					end
-				end
-			end
-		end
-		table.insert(children, { k = "col", p = { key = group.key, gap = "none" }, c = section })
 	end
 	return children
 end

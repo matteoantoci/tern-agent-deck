@@ -5,10 +5,7 @@ local viewModel = require("../lib/view_model")
 
 local HOME = "/Users/me"
 local REPO = "/Users/me/Personal/tern-agents"
-local function HEAD(count: number): string
-	return string.format(":chev :mi-folder-open tern-agents %d [:plus](New tab in this repo)", count)
-end
-local TMP = ":chev :mi-folder-open tmp %d [:plus](New tab in this folder)"
+local NOW = 1_800_000_000
 
 -- An agent in REPO unless `fields` names another working directory (then outside any repo, unless it names one).
 local function agent(fields: { [string]: any }): { [string]: any }
@@ -23,73 +20,44 @@ local function agent(fields: { [string]: any }): { [string]: any }
 end
 
 local function build(input: { [string]: any }): any
-	local full: { [string]: any } = { agents = {}, now = 0, home = HOME, plugin = "agent-deck" }
+	local full: { [string]: any } = { agents = {}, now = 0, time = NOW, home = HOME, plugin = "agent-deck" }
 	for k, v in input do
 		full[k] = v
 	end
 	return viewModel.build(full :: any)
 end
 
-t.test("Needs you lists the waiting agents at the top, with their folder, and their rows stay in their section", function()
+t.test("Needs you lists the waiting agents first, each in no other zone, pinned ones too", function()
 	local out = build({
 		agents = {
 			agent({ pane = 1, title = "plan" }),
-			agent({ pane = 2, title = "ask", state = "waiting_input" }),
+			agent({ pane = 2, title = "ask", state = "waiting_input", activeAt = NOW - 90 }),
+			agent({ pane = 3, title = "pinned ask", state = "waiting_input", activeAt = NOW - 30 }),
 		},
+		pins = { { pane = 3, cwd = REPO, title = "pinned ask" } },
 	}).view
-	t.eq(visible.rows(out), {
-		":bell Needs you 1",
-		"●(Waiting for you) ask tern-agents :bell",
-		HEAD(2),
-		"●(Idle) plan",
-		"●(Waiting for you) ask :bell",
-	})
-	t.eq(visible.hover(out, "ask tern-agents"), "ask · Waiting for you\nRepo ~/Personal/tern-agents")
+	t.eq(visible.zones(out), { "■ Needs you 2", "■ Idle 1" })
+	t.eq(visible.zone(out, "Needs you"), { ":sparkle(Waiting for you) ask 1m", ":sparkle(Waiting for you) pinned ask 30s" })
+	t.eq(visible.zone(out, "Idle"), { "tern-agents [:plus](New tab in this repo)", ":sparkle(Idle) plan" })
+	t.eq(visible.click(out, ") ask"), "focus=2")
 end)
 
-t.test("with Needs you, agents outside any repo keep their folder's section", function()
-	t.eq(visible.rows(build({
-		agents = {
-			agent({ pane = 1, title = "a", cwd = "/tmp" }),
-			agent({ pane = 2, title = "b", cwd = "/tmp", state = "waiting_input" }),
-		},
-	}).view), { ":bell Needs you 1", "●(Waiting for you) b tmp :bell", string.format(TMP, 2), "●(Idle) a", "●(Waiting for you) b :bell" })
-end)
-
-t.test("Needs you hides when no agent waits, and leaves out a waiting agent that is pinned", function()
-	t.eq(visible.rows(build({ agents = { agent({ pane = 1, title = "plan", state = "working", workingSince = 0 }) } }).view), {
-		HEAD(1),
-		"●(Working) plan",
-	})
-	t.eq(visible.rows(build({
-		agents = { agent({ pane = 1, title = "plan" }), agent({ pane = 2, title = "ask", state = "waiting_input" }) },
-		pins = { { pane = 2, cwd = REPO, title = "ask" } },
-	}).view), {
-		":chev :pin Pinned 1",
-		"●(Waiting for you) ask :bell",
-		HEAD(2),
-		"●(Idle) plan",
-		"●(Waiting for you) ask :bell",
-	})
+t.test("Needs you hides when no agent waits", function()
+	local out = build({ agents = { agent({ pane = 1, title = "plan", state = "working", workingSince = 0 }) } }).view
+	t.eq(visible.zones(out), { "■ Working 1 busy" })
 end)
 
 t.test("Needs you lists the agent that has waited longest first", function()
-	t.eq(visible.rows(build({
+	t.eq(visible.zone(build({
 		agents = {
-			agent({ pane = 1, title = "late", state = "waiting_input", activeAt = 300 }),
-			agent({ pane = 2, title = "early", state = "waiting_input", activeAt = 100, cwd = "/tmp" }),
-			agent({ pane = 3, title = "middle", state = "waiting_input", activeAt = 200 }),
+			agent({ pane = 1, title = "late", state = "waiting_input", activeAt = NOW - 100 }),
+			agent({ pane = 2, title = "early", state = "waiting_input", activeAt = NOW - 300, cwd = "/tmp" }),
+			agent({ pane = 3, title = "middle", state = "waiting_input", activeAt = NOW - 200 }),
 		},
-	}).view), {
-		":bell Needs you 3",
-		"●(Waiting for you) early tmp :bell",
-		"●(Waiting for you) middle tern-agents :bell",
-		"●(Waiting for you) late tern-agents :bell",
-		HEAD(2),
-		"●(Waiting for you) late :bell",
-		"●(Waiting for you) middle :bell",
-		string.format(TMP, 1),
-		"●(Waiting for you) early :bell",
+	}).view, "Needs you"), {
+		":sparkle(Waiting for you) early 5m",
+		":sparkle(Waiting for you) middle 3m",
+		":sparkle(Waiting for you) late 1m",
 	})
 end)
 

@@ -53,7 +53,7 @@ local function scanTick(_cx: WindowCx?)
 	tern.timer(60 * 1000, scanTick)
 end
 
--- Shows or hides the sidebar everywhere: the palette command, its key, and the head's ⋯ menu and hide button.
+-- Shows or hides the sidebar everywhere: the palette command and its key.
 local function toggleSidebar(cx: WindowCx)
 	sidebar.toggle(cx)
 	startTicking()
@@ -77,8 +77,7 @@ tern.command({
 	end,
 })
 
--- Only this command (and the same item of the sidebar's ⋯ menu) arranges tabs; the plugin never moves panes by
--- itself.
+-- Only this command arranges tabs; the plugin never moves panes by itself.
 tern.command({
 	id = "arrange-by-repo",
 	title = "Arrange tabs by project",
@@ -249,13 +248,8 @@ tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	return true
 end)
 
--- The `+` button on a folder row sends `new=<folder>`; the empty state's "New tab here" button and the ⋯ menu's
--- "New tab here" send `new-here`.
+-- The `+` on a project label or a Recent folder row sends `new=<folder>`.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
-	if ev.act == "new-here" then
-		sidebar.newTabHere(cx)
-		return true
-	end
 	if ev.act ~= "new" or type(ev.value) ~= "string" or ev.value == "" then
 		return false
 	end
@@ -263,14 +257,9 @@ tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	return true
 end)
 
--- The head: the ⋯ menu's "Arrange tabs by project" sends `arrange-by-repo`, its "Toggle sidebar" and the hide button
--- `toggle-sidebar`. The view strip sends `view=live` or `view=recent`.
+-- The Live/Recent switch sends `view=live` or `view=recent`.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
-	if ev.act == "arrange-by-repo" then
-		sidebar.arrangeByRepo(cx)
-	elseif ev.act == "toggle-sidebar" then
-		toggleSidebar(cx)
-	elseif ev.act == "view" and (ev.value == "live" or ev.value == "recent") then
+	if ev.act == "view" and (ev.value == "live" or ev.value == "recent") then
 		store.setView(ev.value :: viewModel.View)
 		sidebar.refresh(cx)
 		if ev.value == "recent" then
@@ -282,14 +271,13 @@ tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	return true
 end)
 
--- A Live folder row sends `fold=<group key>`, the Older row of a group `older=<group key>`, a Recent folder row
--- `recent=<group key>`; the Recent view's last row `recent-more`.
-local KEY_SETS: { [string]: store.KeySet } = { fold = "folded", older = "older", recent = "recent" }
-
+-- "Older than a day" sends `older`, a Recent folder row `recent=<group key>`, the Recent view's last row
+-- `recent-more`.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
-	local set: store.KeySet? = KEY_SETS[ev.act]
-	if set and type(ev.value) == "string" and ev.value ~= "" then
-		store.toggle(set, ev.value)
+	if ev.act == "older" then
+		store.toggleOlder()
+	elseif ev.act == "recent" and type(ev.value) == "string" and ev.value ~= "" then
+		store.toggle("recent", ev.value)
 	elseif ev.act == "recent-more" then
 		store.toggleRecentAll()
 	else
