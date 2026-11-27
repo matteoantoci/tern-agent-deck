@@ -1389,7 +1389,8 @@ function viewModel.redrawDue(input: Input): number?
 	end
 	if time then
 		-- A reset a day or more away shows its weekday; a nearer one counts down, and its line goes when it passes.
-		-- `time` counts whole seconds: on a boundary, the next text shows a second later.
+		-- `time` counts whole seconds, but a reset has a millisecond fraction: the delay rounds up to whole seconds so
+		-- the next redraw sees a later `time`. On a boundary, the next text shows a second later.
 		for _, hot in hotQuotas(input.quotas, time) do
 			local left = hot.left
 			local change
@@ -1399,7 +1400,7 @@ function viewModel.redrawDue(input: Input): number?
 				local unit = if left < MINUTE then 1 elseif left < HOUR then MINUTE else HOUR
 				change = left % unit
 			end
-			soon((if change > 0 then change else 1) * 1000)
+			soon(math.max(1, math.ceil(change)) * 1000)
 		end
 	end
 	return due

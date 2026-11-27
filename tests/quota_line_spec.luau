@@ -116,7 +116,11 @@ t.test("the sidebar redraws when the reset shows another text, and when the wind
 	end
 	t.eq(due(38 * MINUTE + 30), 30 * 1000)
 	t.eq(due(3 * HOUR + 20 * MINUTE), 20 * MINUTE * 1000)
-	t.eq(due(0.25), 250)
+	-- A reset's millisecond fraction rounds up to a whole second, so a redraw never comes before `time` ticks.
+	t.eq(due(0.25), 1000)
+	t.eq(due(38 * MINUTE + 0.164), 1000)
+	t.eq(due(38 * MINUTE + 30.001), 31 * 1000)
+	t.eq(due(42.164), 1000)
 	t.eq(due(DAY + 2 * HOUR), 2 * HOUR * 1000)
 	t.eq(due(38 * MINUTE + 30, "ok"), nil)
 	t.eq(due(38 * MINUTE), 1000)
