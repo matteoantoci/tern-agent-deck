@@ -178,12 +178,13 @@
 	background: var(--l1);
 }
 
-/* The label's `+` floats over the right end, so the rule ends on the same right edge as the row numbers; while the
-   `+` shows, the rule stops short of it. */
+/* The label's `+` floats over the right end of the rule. Its box stays inside the row: its right edge is on the right
+   edge of the row numbers (the row's padding). While the `+` shows, the rule stops short of it. */
 [data-role='agents.root'] [data-role^='agents.label.'] > [data-role='agents.hover'] {
 	position: absolute;
 	top: 0;
-	right: -4px;
+	right: 8px;
+	margin-right: 0;
 }
 
 [data-role='agents.root'] [data-role^='agents.label.']:is(:hover, :focus-within) [data-role='agents.rule'] {
