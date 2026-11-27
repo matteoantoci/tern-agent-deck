@@ -3,8 +3,10 @@
 -- `~/.omp/agent/sessions` off the UI thread; its callback parses the output (`lib/sessions.luau`, about 3 ms for 357
 -- files) and keeps the result. The scan runs at most once a minute, and again when an agent finishes a turn.
 -- It also reads the session file each pane's omp reported to Tern, from `tern inspect --json` (about 30 ms, off the
--- UI thread too): the session of a live agent.
+-- UI thread too): the session of a live agent. With each such read it reads the models of those sessions, and the
+-- cost reader (`lib/cost_reader.luau`) reads what they cost.
 
+local costReader = require("./cost_reader")
 local sessions = require("./sessions")
 local viewModel = require("./view_model")
 
@@ -301,8 +303,9 @@ function reader.readReported(changed: (cx: WindowCx) -> ())
 							changed(cx)
 						end
 					end
-					-- The user may have switched the model with the same session file.
+					-- The user may have switched the model with the same session file; the agents' costs grew.
 					readModels(reported, changed)
+					costReader.read(reported, changed)
 				end
 			end
 			if inspectAgain then

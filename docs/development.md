@@ -41,7 +41,17 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   when an agent's pane retitles itself), reads the session file each pane's omp reported to Tern
   (`omp_session_file`): a live agent's session. After each of those reads, one `grep` and `sed` over the reported
   files reads their `model_change` entries and the model of each assistant message; the last one in each file is the
-  main agent's model as `provider/model`, which its hover card shows.
+  main agent's model as `provider/model`, which its hover card shows. With them, the cost reader reads what those
+  sessions cost.
+- `lib/cost_reader.luau`: the cost reader. A read-only query of omp's `agent.db` (`sqlite3 -readonly`, with each
+  scan; only `id`, `provider` and `credential_type` of `auth_credentials`) gives each credential's type. With the
+  model read, one `find` and `stat` lists the reported session files and every file in their session folders (the
+  subagents', at any depth), and one `tail`, `head` and `awk` per file that grew reads only the bytes after the
+  offset kept for it: the `usage.cost.total` and `credentialId` of each assistant message. The running totals per
+  file give each live session's cost: `api_key` credentials as money spent, `oauth` ones as subscription use. A
+  failed query or read shows no cost.
+- `lib/costs.luau`: the pure parser of those outputs (credential types, file sizes, the cost records of each read,
+  a line the read cut counted on the next read) and the sum of a session's cost.
 - `lib/sessions.luau`: the pure parser of that scan's output (path, id, working directory, title, last write, open),
   of the `tern inspect` answer (session file by pane), of the `model_change` entries (model by file) and of a
   session file's header id.
