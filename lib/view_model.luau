@@ -820,6 +820,32 @@ function viewModel.tabTitles(agents: { Agent }): { [number]: string }
 	return out
 end
 
+--- This tab's agent, whose row is drawn with the accent: the focused pane when it runs an agent. Else (the focus is
+--- on a sidebar canvas, a shell, or nowhere) the stored last focused agent when it sits in the active tab, then the
+--- main agent of the active tab (as `tabTitles` picks it), then the stored one.
+function viewModel.thisTabAgent(agents: { Agent }, focused: number?, activeTab: number?, stored: number?): number?
+	local storedTab: number? = nil
+	for _, agent in agents do
+		if focused ~= nil and agent.pane == focused then
+			return focused
+		end
+		if stored ~= nil and agent.pane == stored then
+			storedTab = agent.tab
+		end
+	end
+	if activeTab ~= nil then
+		if storedTab == activeTab then
+			return stored
+		end
+		for _, agent in startOrder(agents) do
+			if agent.tab == activeTab and agent.state ~= "exited" then
+				return agent.pane
+			end
+		end
+	end
+	return stored
+end
+
 --- The title of `tab`, from the names `tabTitles` gave: the name the user gave the tab, else its main agent's name;
 --- nil (Tern's own title) for a tab without an agent.
 function viewModel.tabTitle(tab: { id: number, name: string? }, titles: { [number]: string }): string?

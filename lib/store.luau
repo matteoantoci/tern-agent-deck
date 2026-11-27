@@ -26,6 +26,8 @@ local SUBS_OPEN = "subs-open"
 -- folder (the Live view had folders then), and the open folders of the Recent view and whether it showed every
 -- folder (the Recent view had folders then).
 local OLD_KEYS = { "folded", "older", "recent", "recent-all" }
+-- The pane of the agent the user last focused outside the sidebar, so that a plugin reload keeps this tab's agent.
+local FOCUSED = "focused"
 -- The view the strip shows: `"recent"`, or nothing for Live.
 local VIEW = "view"
 
@@ -260,6 +262,22 @@ local function agents(cx: WindowCx): { viewModel.Agent }
 		})
 	end
 	return out
+end
+
+--- The pane of the agent the user last focused outside the sidebar, as `tern.kv` keeps it.
+function store.focused(): number?
+	local pane = get(FOCUSED)
+	if type(pane) == "number" then
+		return pane
+	end
+	return nil
+end
+
+--- Keeps `pane` as the agent the user last focused outside the sidebar.
+function store.setFocused(pane: number)
+	if get(FOCUSED) ~= pane then
+		tern.kv.set(FOCUSED, pane)
+	end
 end
 
 --- Removes the pin at `index` of the stored pins (what a pinned row whose agent is gone names).
