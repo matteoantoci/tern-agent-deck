@@ -36,8 +36,8 @@ local function rows(agents: { any }, now: number?): { string }
 	return shown
 end
 
-t.test("an idle agent shows as one row with the idle dot and its pane title without the icon", function()
-	t.eq(rows({ agent({}) }), { "●(Idle) Fix login" })
+t.test("an idle agent shows as one row with the idle dot and its pane title with omp's icon", function()
+	t.eq(rows({ agent({}) }), { "●(Idle) " .. ICON .. "Fix login" })
 end)
 
 t.test("each state has its own dot", function()
@@ -77,7 +77,7 @@ end)
 
 t.test("a working row's hover card counts the turn from its start", function()
 	local view = viewModel.build({ agents = { agent({ state = "working", workingSince = 1000 }) }, now = 66000 }).view
-	t.eq(visible.hover(view, "Fix login"), "Fix login · Working\nWorking for ⏱65s")
+	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Working\nWorking for ⏱65s")
 end)
 
 t.test("a tab name the user set replaces the pane title", function()
@@ -88,7 +88,7 @@ t.test("agents that share a named tab keep their pane titles", function()
 	t.eq(rows({
 		agent({ pane = 1, tab = 7, tabName = "Auth rewrite", title = ICON .. "Plan" }),
 		agent({ pane = 2, tab = 7, tabName = "Auth rewrite", title = ICON .. "Build" }),
-	}), { "●(Idle) Plan", "●(Idle) Build" })
+	}), { "●(Idle) " .. ICON .. "Plan", "●(Idle) " .. ICON .. "Build" })
 end)
 
 t.test("an agent without a title shows its folder name", function()
@@ -96,15 +96,23 @@ t.test("an agent without a title shows its folder name", function()
 	t.eq(visible.rows(view), { folder("/Users/me/Personal/tern-agents", 1), "●(Idle) tern-agents" })
 end)
 
-t.test("the hover card shows the provider logo of a known model and names the model without its glyph", function()
+t.test("the hover card names the model without its glyph and with no logo", function()
 	local view = viewModel.build({ agents = { agent({ model = "Opus 5.5 \u{F0EB}" }) }, now = 0 }).view
-	t.eq(visible.rows(view)[2], "●(Idle) Fix login")
-	t.eq(visible.hover(view, "Fix login"), "Fix login · Idle\n:provider-anthropic Model Opus 5.5")
+	t.eq(visible.rows(view)[2], "●(Idle) " .. ICON .. "Fix login")
+	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Idle\nModel Opus 5.5")
+end)
+
+t.test("the hover card names an omp agent's model as its session does, provider/model, rather than Tern's name", function()
+	local view = viewModel.build({
+		agents = { agent({ model = "Opus 5.5 \u{F0EB}", route = "anthropic/claude-opus-5-5@bedrock" }) },
+		now = 0,
+	}).view
+	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Idle\nModel anthropic/claude-opus-5-5")
 end)
 
 t.test("the hover card shows the agent's state and its last message", function()
 	local view = viewModel.build({ agents = { agent({ lastMessage = "Tests pass. **Ready** to merge." }) }, now = 0 }).view
-	t.eq(visible.hover(view, "Fix login"), "Fix login · Idle\nTests pass. **Ready** to merge.")
+	t.eq(visible.hover(view, ICON .. "Fix login"), ICON .. "Fix login · Idle\nTests pass. **Ready** to merge.")
 end)
 
 t.test("a click on a row asks to focus that agent's pane", function()

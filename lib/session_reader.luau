@@ -61,6 +61,14 @@ local inspecting = false
 -- A read asked for while one ran: it runs when that one ends.
 local inspectAgain = false
 
+-- The main agent's model (`provider/model`) of each reported session file, from its last default-role
+-- `model_change` entry, by file.
+local models: { [string]: string } = {}
+-- Counts the model reads, so that only the newest one's answer is kept.
+local modelRead = 0
+-- A model read that takes longer is killed, and the last answer stays.
+local MODEL_TIMEOUT = 5 * 1000
+
 local function same(a: { viewModel.Session }?, b: { viewModel.Session }): boolean
 	if a == nil or #a ~= #b then
 		return false
@@ -169,13 +177,71 @@ local function sameFiles(a: { [number]: string }, b: { [number]: string }): bool
 	return true
 end
 
+local function sameModels(a: { [string]: string }, b: { [string]: string }): boolean
+	for file, model in a do
+		if b[file] ~= model then
+			return false
+		end
+	end
+	for file in b do
+		if a[file] == nil then
+			return false
+		end
+	end
+	return true
+end
+
 --- The session file each pane's omp reported to Tern, by pane, from the last read; empty before the first one.
 function reader.reported(): { [number]: string }
 	return reported
 end
 
---- Reads which session file each pane's omp reported (`omp_session_file` in `tern inspect --json`). `changed` runs,
---- with a fresh `cx`, when the answer differs from the last one.
+--- The main agent's model of the session in `file` as omp's session file names it (`provider/model`); nil when the
+--- file was not read yet or names none.
+function reader.model(file: string): string?
+	return models[file]
+end
+
+-- Reads the model of each reported session file, off the UI thread: one `grep` prints the `model_change` entries of
+-- every file (a fixed string; a JSON string value escapes its quotes, so a message that quotes one does not match).
+-- `changed` runs, with a fresh `cx`, when the answer differs from the last one.
+local function readModels(files: { [number]: string }, changed: (cx: WindowCx) -> ())
+	local argv = { "/usr/bin/grep", "-H", "-F", '"type":"model_change"', "--" }
+	local seen: { [string]: boolean } = {}
+	for _, file in files do
+		if not seen[file] then
+			seen[file] = true
+			table.insert(argv, file)
+		end
+	end
+	modelRead += 1
+	local this = modelRead
+	if #argv == 5 then
+		models = {}
+		return
+	end
+	local ok, err = pcall(function()
+		tern.process.run(argv, { timeout_ms = MODEL_TIMEOUT }, function(result: ProcessResult, cx: WindowCx?)
+			-- grep exits 1 when no file has a match and 2 when a file is gone: the output still holds the others.
+			if this ~= modelRead or result.timed_out then
+				return
+			end
+			local found = sessions.models(result.stdout)
+			if not sameModels(models, found) then
+				models = found
+				if cx then
+					changed(cx)
+				end
+			end
+		end)
+	end)
+	if not ok then
+		print("agents: the session model read did not start: " .. tostring(err))
+	end
+end
+
+--- Reads which session file each pane's omp reported (`omp_session_file` in `tern inspect --json`), then the model
+--- each of those sessions names. `changed` runs, with a fresh `cx`, when either answer differs from the last one.
 function reader.readReported(changed: (cx: WindowCx) -> ())
 	if inspecting then
 		inspectAgain = true
@@ -195,6 +261,8 @@ function reader.readReported(changed: (cx: WindowCx) -> ())
 							changed(cx)
 						end
 					end
+					-- The user may have switched the model with the same session file.
+					readModels(reported, changed)
 				end
 			end
 			if inspectAgain then

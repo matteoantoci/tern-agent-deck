@@ -49,7 +49,7 @@ t.test("a subagent row's hover card shows its role, model, effort, current tool 
 	})
 	t.eq(
 		visible.hover(out, "Ticket07"),
-		"Ticket07 · Running\nRole scout\nModel claude-opus-5-5\n◔high Effort high\nTool bash\nIntent Running probe"
+		"Ticket07 · Running\nRole scout\nModel anthropic/claude-opus-5-5\n◔high Effort high\nTool bash\nIntent Running probe"
 	)
 	t.eq(visible.titles(out, "Ticket07"), {})
 	t.eq(visible.hover(out, "Quiet"), "Quiet · Running")

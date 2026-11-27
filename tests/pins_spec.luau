@@ -5,6 +5,7 @@ local viewModel = require("../lib/view_model")
 
 local HOME = "/Users/me"
 local REPO = "/Users/me/Personal/tern-agents"
+local SESSION = "/Users/me/.omp/agent/sessions/-Personal-tern-agents/2026-11-01T08-00-00-000Z_1.jsonl"
 
 -- An agent in REPO unless `fields` names another working directory (then outside any repo, unless it names one).
 local function agent(fields: { [string]: any }): { [string]: any }
@@ -84,7 +85,7 @@ t.test("a pin ignores another agent that got its old pane id in another folder",
 	local v = view({ agents = agents, pins = pins })
 	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build", ":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)", "●(Idle) other work" })
 	t.eq(visible.click(v, "build"), "gone=1", "a click on the gone agent does not focus the other one")
-	t.eq(visible.menu(v, "build"), { "Unpin → forget=1" })
+	t.eq(visible.menu(v, "build")[1], "Unpin → forget=1")
 	t.eq(visible.menu(v, "other work")[1], "Pin → pin=2")
 	t.eq(viewModel.pinOf(agents :: any, pins, 2), nil, "Pin this agent pins the other agent")
 end)
@@ -103,12 +104,67 @@ t.test("a pinned agent that exited stays in Pinned, dimmed", function()
 	t.eq(visible.dimmed(v, "build"), true)
 end)
 
+t.test("a click on a pinned agent that exited resumes its session, from the pin when the agent no longer reports it", function()
+	local v = view({
+		agents = { agent({ pane = 2, title = "build", state = "exited", sessionFile = SESSION }) },
+		pins = { { pane = 2, cwd = REPO, title = "build" } },
+	})
+	t.eq(visible.click(v, "build"), "resume=" .. SESSION)
+	v = view({
+		agents = { agent({ pane = 2, title = "build", state = "exited" }) },
+		pins = { { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } },
+	})
+	t.eq(visible.click(v, "build"), "resume=" .. SESSION)
+	t.eq(visible.menu(v, "build"), {
+		"Unpin → unpin=2",
+		"Rename → rename (off: The agent is not running)",
+		"Copy session ID → copy-id=" .. SESSION,
+		"Copy session path → copy-path=" .. SESSION,
+		"Interrupt → interrupt=2 (off: The agent is not in a turn)",
+	})
+end)
+
 t.test("a pinned agent whose pane is gone stays in Pinned, dimmed, under its last title", function()
 	local v = view({ agents = {}, pins = { { pane = 2, cwd = REPO, title = "\u{F0E7} build" } } })
-	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) build" })
-	t.eq(visible.dimmed(v, "build"), true)
-	t.eq(visible.menu(v, "build"), { "Unpin → forget=1" })
-	t.eq(visible.click(v, "build"), "gone=1")
+	t.eq(visible.rows(v), { ":pin Pinned 1", "○(Exited) \u{F0E7} build" })
+	t.eq(visible.dimmed(v, "\u{F0E7} build"), true)
+	t.eq(visible.click(v, "\u{F0E7} build"), "gone=1")
+end)
+
+t.test("a pinned agent whose pane is gone resumes its session on a click, and its menu has the copy items", function()
+	local v = view({ agents = {}, pins = { { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } } })
+	t.eq(visible.click(v, "build"), "resume=" .. SESSION)
+	t.eq(visible.menu(v, "build"), {
+		"Unpin → forget=1",
+		"Rename → rename (off: The agent is not running)",
+		"Copy session ID → copy-id=" .. SESSION,
+		"Copy session path → copy-path=" .. SESSION,
+		"Interrupt → interrupt=2 (off: The agent is not in a turn)",
+	})
+end)
+
+t.test("a gone pin stored without a session file resumes the newest session of its folder with its title", function()
+	local older = { file = "/s/old.jsonl", cwd = REPO, title = "\u{F0E7} build", at = 100 }
+	local newer = { file = "/s/new.jsonl", cwd = REPO .. "/", title = "\u{F0E7} build", at = 200 }
+	local other = { file = "/s/other.jsonl", cwd = REPO, title = "\u{F0E7} plan", at = 300 }
+	local v = view({ agents = {}, pins = { { pane = 2, cwd = REPO, title = "\u{F0E7} build" } }, sessions = { older, newer, other } })
+	t.eq(visible.click(v, "\u{F0E7} build"), "resume=/s/new.jsonl")
+end)
+
+t.test("a pin follows its session to the agent that resumed it, and keeps the session file the agent reports", function()
+	local agents = {
+		agent({ pane = 2, title = "build", state = "exited", sessionFile = SESSION }),
+		agent({ pane = 9, title = "build", sessionFile = SESSION }),
+	}
+	local pins = { { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } }
+	t.eq(viewModel.resolvePins(agents :: any, pins), { { pane = 9, cwd = REPO, title = "build", sessionFile = SESSION } })
+	t.eq(visible.rows(view({ agents = agents, pins = pins })), { ":pin Pinned 1", "●(Idle) build" })
+	t.eq(
+		viewModel.resolvePins({ agent({ pane = 2, title = "build", sessionFile = SESSION }) } :: any, { { pane = 2, cwd = REPO, title = "build" } }),
+		{ { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } }
+	)
+	t.eq(viewModel.pinOf(agents :: any, pins, 9), 1, "Unpin on the resumed agent finds the pin")
+	t.eq(viewModel.pinOf(agents :: any, pins, 2), nil, "the exited pane no longer holds the pin")
 end)
 
 t.test("live agents are not dimmed", function()

@@ -226,8 +226,8 @@ tern.on("pane_closed", function(ev: PaneEvent, cx: WindowCx)
 	sidebar.paneClosed(ev.pane)
 end)
 
--- A row click sends `focus=<pane>`; the row of a pinned agent that is gone sends `gone=<pin index>`; a subagent row
--- sends `subagent=<pane> <node id>`.
+-- A row click sends `focus=<pane>`; the row of a pinned agent that is gone and reported no session file sends
+-- `gone=<pin index>`; a subagent row sends `subagent=<pane> <node id>`.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	if ev.act == "gone" then
 		cx:toast("info", "That agent is gone")
@@ -299,7 +299,7 @@ tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	return true
 end)
 
--- A closed session's row sends `resume=<session file>`.
+-- A closed session's row, and that of a pinned agent that stopped, sends `resume=<session file>`.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	if ev.act ~= "resume" or type(ev.value) ~= "string" or ev.value == "" then
 		return false

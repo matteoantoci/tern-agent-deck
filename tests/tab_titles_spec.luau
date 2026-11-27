@@ -18,19 +18,19 @@ local function title(agents: { any }, id: number, name: string?): string?
 	return viewModel.tabTitle({ id = id, name = name }, viewModel.tabTitles(agents :: any))
 end
 
-t.test("a tab with one agent shows that agent's name: its pane title without the leading icon", function()
-	t.eq(title({ agent(5, 1, ICON .. " TERN: Build tern plugin") }, 1), "TERN: Build tern plugin")
+t.test("a tab with one agent shows that agent's name: its pane title with omp's icon", function()
+	t.eq(title({ agent(5, 1, ICON .. " TERN: Build tern plugin") }, 1), ICON .. " TERN: Build tern plugin")
 end)
 
 t.test("a tab with several agents shows the first one in start order", function()
 	local agents = { agent(12, 2, ICON .. " Second"), agent(4, 2, ICON .. " First"), agent(8, 3, ICON .. " Other tab") }
-	t.eq(title(agents, 2), "First")
-	t.eq(title(agents, 3), "Other tab")
+	t.eq(title(agents, 2), ICON .. " First")
+	t.eq(title(agents, 3), ICON .. " Other tab")
 end)
 
 t.test("a tab the user renamed keeps its name", function()
 	t.eq(title({ agent(5, 1, ICON .. " Agent title") }, 1, "My tab"), "My tab")
-	t.eq(title({ agent(5, 1, ICON .. " Agent title") }, 1, ""), "Agent title", "an empty name is no name")
+	t.eq(title({ agent(5, 1, ICON .. " Agent title") }, 1, ""), ICON .. " Agent title", "an empty name is no name")
 end)
 
 t.test("a tab without an agent keeps Tern's own title", function()
@@ -39,7 +39,7 @@ t.test("a tab without an agent keeps Tern's own title", function()
 end)
 
 t.test("an exited agent does not name its tab: the next agent in start order does", function()
-	t.eq(title({ agent(3, 1, ICON .. " Done", { state = "exited" }), agent(6, 1, ICON .. " Running") }, 1), "Running")
+	t.eq(title({ agent(3, 1, ICON .. " Done", { state = "exited" }), agent(6, 1, ICON .. " Running") }, 1), ICON .. " Running")
 	t.eq(title({ agent(3, 1, ICON .. " Done", { state = "exited" }) }, 1), nil)
 end)
 

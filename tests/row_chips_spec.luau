@@ -17,10 +17,10 @@ local function view(agents: { any }, now: number?): any
 	return viewModel.build({ agents = agents, now = now or 0 }).view
 end
 
-t.test("a working row shows the dot and the name only; the logo, effort and timer are in its card", function()
+t.test("a working row shows the dot and the name only; the model, effort and timer are in its card", function()
 	local out = view({ agent({ state = "working", model = "Opus 5.5 \u{F0EB}", effort = "high", workingSince = 0 }) }, 12000)
 	t.eq(visible.agentRows(out), { "●(Working) Fix login" })
-	t.eq(visible.hover(out, "Fix login"), "Fix login · Working\n:provider-anthropic Model Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
+	t.eq(visible.hover(out, "Fix login"), "Fix login · Working\nModel Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
 end)
 
 t.test("a row shows no model text: an unknown model and an empty effort show nothing on the row", function()
@@ -32,7 +32,7 @@ end)
 
 t.test("the hover card names the agent and its state, its model and its effort, then shows the last message", function()
 	local out = view({ agent({ model = "Opus 5.5 \u{F0EB}", effort = "xhigh", lastMessage = "Tests pass." }) })
-	t.eq(visible.hover(out, "Fix login"), "Fix login · Idle\n:provider-anthropic Model Opus 5.5\n◔xhigh Effort xhigh\nTests pass.")
+	t.eq(visible.hover(out, "Fix login"), "Fix login · Idle\nModel Opus 5.5\n◔xhigh Effort xhigh\nTests pass.")
 end)
 
 t.test("a hover card leaves out what the agent does not tell", function()
@@ -59,7 +59,7 @@ t.test("a row with a hover card carries no tooltip on itself or on its parts: ev
 	t.eq(visible.titles(out, "Fix login"), {})
 	t.eq(
 		visible.hover(out, "Fix login"),
-		"Fix login · Working\n:provider-anthropic Model Opus 5.5\n◔high Effort high\nWorking for ⏱12s\nOn it."
+		"Fix login · Working\nModel Opus 5.5\n◔high Effort high\nWorking for ⏱12s\nOn it."
 	)
 	local idle = view({ agent({}) })
 	t.eq(visible.titles(idle, "Fix login"), {})

@@ -39,6 +39,7 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | Click | Result |
 | --- | --- |
 | An agent row | Focuses that agent. It switches the session or brings a parked pane back. If omp shows a subagent, omp goes back to the main session. |
+| A pinned agent that stopped | Resumes its session in a new tab with `omp --resume`. The pin moves to the resumed agent. |
 | A subagent row | Opens that subagent in omp's view. |
 | A folder row | Folds or opens the folder. |
 | `+` on a folder row | Opens a new tab in that folder. |
@@ -49,7 +50,7 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | The Live and Recent buttons | Switch the view. |
 | ⋯ in the head | Opens a menu: New tab here, Arrange tabs by project, Toggle sidebar. |
 
-Point at a row to see its card: the state, the model and its provider, the effort, the turn timer and the last message.
+Point at a row to see its card: the state, the model as `provider/model`, the effort, a subagent's own estimate of its progress, the turn timer and the last message.
 
 ### Right-click menu
 
@@ -58,9 +59,9 @@ Point at a row to see its card: the state, the model and its provider, the effor
 | A live agent | Pin or Unpin, Rename, Copy session ID, Copy session path, Interrupt |
 | A subagent | Copy session ID, Copy session path |
 | A closed session | Copy session ID, Copy session path |
-| A pinned agent that is gone | Unpin |
+| A pinned agent that stopped | Unpin, Rename (off), Copy session ID, Copy session path, Interrupt (off) |
 
-Rename is available for omp agents. It is off while omp shows a subagent and while the agent waits for your answer. omp adds an icon and a category to the new title, so the title changes after about half a minute.
+Rename is available for running omp agents. It is off while omp shows a subagent and while the agent waits for your answer. omp adds an icon and a category to the new title, so the title changes after about half a minute. Rows and tab titles show omp's icon in front of the title.
 
 ### Keys and commands
 

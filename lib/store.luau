@@ -5,6 +5,7 @@
 -- survives restarts and plugin reloads, so every tab and window shows the same view, pins, rows and timers, and they
 -- stay after a reload or a Tern restart.
 
+local sessionReader = require("./session_reader")
 local turns = require("./turns")
 local viewModel = require("./view_model")
 
@@ -57,7 +58,7 @@ local function pins(): { viewModel.Pin }
 	end
 	for _, pin in stored do
 		if type(pin) == "table" and type(pin.pane) == "number" then
-			table.insert(out, { pane = pin.pane, cwd = str(pin.cwd), title = str(pin.title) })
+			table.insert(out, { pane = pin.pane, cwd = str(pin.cwd), title = str(pin.title), sessionFile = str(pin.sessionFile) })
 		end
 	end
 	return out
@@ -77,7 +78,7 @@ local function samePins(a: { viewModel.Pin }, b: { viewModel.Pin }): boolean
 	end
 	for i, pin in a do
 		local other = b[i]
-		if pin.pane ~= other.pane or pin.cwd ~= other.cwd or pin.title ~= other.title then
+		if pin.pane ~= other.pane or pin.cwd ~= other.cwd or pin.title ~= other.title or pin.sessionFile ~= other.sessionFile then
 			return false
 		end
 	end
@@ -206,9 +207,10 @@ function store.noteTurn(ev: AgentStateEvent)
 	end
 end
 
--- The agents Tern lists now, with the working directory and pane title the pins match them by.
+-- The agents Tern lists now, with the working directory, pane title and session file the pins match them by.
 local function agents(cx: WindowCx): { viewModel.Agent }
 	local out: { viewModel.Agent } = {}
+	local reported = sessionReader.reported()
 	for _, block in cx.agents:list() do
 		local info = cx.session:pane(block.pane)
 		table.insert(out, {
@@ -216,6 +218,7 @@ local function agents(cx: WindowCx): { viewModel.Agent }
 			state = block.state,
 			cwd = str(block.cwd),
 			title = info and str(info.title),
+			sessionFile = reported[block.pane],
 		})
 	end
 	return out
@@ -238,8 +241,8 @@ function store.unpin(cx: WindowCx, pane: number)
 	end
 end
 
---- Pins the agent in `pane` with its working directory and pane title as backup keys, at the bottom of Pinned.
---- Returns false when `pane` runs no agent.
+--- Pins the agent in `pane` with its working directory, pane title and session file as backup keys, at the bottom
+--- of Pinned. Returns false when `pane` runs no agent.
 function store.pin(cx: WindowCx, pane: number): boolean
 	local listed = agents(cx)
 	local agent: viewModel.Agent? = nil
@@ -256,7 +259,7 @@ function store.pin(cx: WindowCx, pane: number): boolean
 	if viewModel.pinOf(listed, list, pane) then
 		return true
 	end
-	table.insert(list, { pane = pane, cwd = agent.cwd, title = agent.title })
+	table.insert(list, { pane = pane, cwd = agent.cwd, title = agent.title, sessionFile = agent.sessionFile })
 	setPins(list)
 	return true
 end

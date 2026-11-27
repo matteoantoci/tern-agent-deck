@@ -73,6 +73,9 @@ export type Subagent = {
 	--- The tool the subagent runs now and its intent line.
 	tool: string?,
 	intent: string?,
+	--- The subagent's own estimate of how much of its task it finished, 0 to 1 (`stats.done`): omp asks a running
+	--- subagent for it from about 2 minutes on; nil before that and once it ends.
+	done: number?,
 }
 
 --- The subagents of one running `task` call; `incomplete` when the node budget left part of the tree out; `frozen`
@@ -154,6 +157,14 @@ function subagents.extract(tree: any): Subagents?
 			if type(tool) ~= "table" then
 				tool = {}
 			end
+			local stats: { [string]: any } = p.stats
+			if type(stats) ~= "table" then
+				stats = {}
+			end
+			local done: number? = nil
+			if type(stats.done) == "number" then
+				done = math.clamp(stats.done, 0, 1)
+			end
 			local name = str(p.name) or node.id
 			table.insert(out.agents, {
 				id = node.id,
@@ -166,6 +177,7 @@ function subagents.extract(tree: any): Subagents?
 				effort = level(p.thinking),
 				tool = str(tool.name),
 				intent = plain(tool.intent),
+				done = done,
 			})
 			under = name
 		end

@@ -125,6 +125,7 @@ local function snapshot(cx: WindowCx): viewModel.Input
 			tab = info.tab
 		end
 		local cwd = str(block.cwd)
+		local file = reported[block.pane]
 		table.insert(agents, {
 			pane = block.pane,
 			state = block.state,
@@ -136,7 +137,8 @@ local function snapshot(cx: WindowCx): viewModel.Input
 			effort = effortReader.level(block.pane),
 			lastMessage = str(block.last_message),
 			repo = repos.of(cwd),
-			sessionFile = reported[block.pane],
+			sessionFile = file,
+			route = file and sessionReader.model(file),
 		})
 	end
 	return store.fill({
@@ -582,10 +584,32 @@ local function shellQuote(text: string): string
 	return "'" .. string.gsub(text, "'", "'\\''") .. "'"
 end
 
+-- The working directory of the session in `file`: from the last session scan, else from the agent or the pin that
+-- last reported it (a pinned agent that stopped), else the home folder.
+local function sessionCwd(file: string): string?
+	local session = sessionReader.find(file)
+	if session then
+		return session.cwd
+	end
+	if latest then
+		for _, agent in latest.agents do
+			if agent.sessionFile == file and agent.cwd then
+				return agent.cwd
+			end
+		end
+		local pins: { viewModel.Pin } = latest.pins or {}
+		for _, pin in pins do
+			if pin.sessionFile == file and pin.cwd then
+				return pin.cwd
+			end
+		end
+	end
+	return home()
+end
+
 --- Opens a new tab in the working directory of the omp session in `file` that runs `omp --resume <file>`.
 function sidebar.resume(cx: WindowCx, file: string)
-	local session = sessionReader.find(file)
-	local cwd = (session and session.cwd) or home()
+	local cwd = sessionCwd(file)
 	local ok, err = pcall(function()
 		return cx.layout:new_tab({ cwd = cwd, command = "omp --resume " .. shellQuote(file) })
 	end)

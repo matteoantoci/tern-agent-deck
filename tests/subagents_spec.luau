@@ -77,8 +77,24 @@ t.test("a scoped read shows each running subagent with its model, current tool a
 		"●(Running) Ticket07",
 		":check 1 subagent done",
 	})
-	t.eq(visible.hover(view, "Ticket03"), "Ticket03 · Running\nModel claude-opus-5-5")
-	t.eq(visible.hover(view, "Ticket07"), "Ticket07 · Running\nModel gpt-5.1\nTool bash\nIntent Running probe")
+	t.eq(visible.hover(view, "Ticket03"), "Ticket03 · Running\nModel anthropic/claude-opus-5-5")
+	t.eq(visible.hover(view, "Ticket07"), "Ticket07 · Running\nModel openai/gpt-5.1\nTool bash\nIntent Running probe")
+end)
+
+t.test("a running subagent's own completion estimate shows as its progress; the model drops omp's level suffix", function()
+	local tree = scoped(task("dx", "running", {
+		agent("Ticket03", "running", { model = "anthropic/claude-opus-5-5:high", stats = { done = 0.426, tools = 3 } }),
+		agent("Ticket07", "running", { stats = { tools = 1 } }),
+	}))
+	local subs = subagents.extract(tree) :: any
+	t.eq(subs.agents[1].done, 0.426)
+	t.eq(subs.agents[2].done, nil)
+	local view = viewModel.build({
+		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
+		now = 0,
+		subagents = { [7] = subs },
+	}).view
+	t.eq(visible.hover(view, "Ticket03"), "Ticket03 · Running\nModel anthropic/claude-opus-5-5\nProgress 43%")
 end)
 
 t.test("a subagent's type and thinking level come from its agent and thinking props", function()

@@ -2,7 +2,6 @@
 -- The pure view model: turns the agent list into the sidebar's canvas node tree.
 -- Calls no Tern API, so the plain `luau` CLI can load and test it.
 
-local providers = require("./providers")
 local subagents = require("./subagents")
 local viewing = require("./viewing")
 
@@ -24,6 +23,9 @@ export type Agent = {
 	cwd: string?,
 	--- The model as Tern shows it; may end in a thinking-level glyph.
 	model: string?,
+	--- The model as omp's session file names it (`provider/model`); nil for an agent that is not omp or whose
+	--- session file was not read yet. The hover card shows it rather than `model`.
+	route: string?,
 	--- The thinking-effort level of omp's composer (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`, or
 	--- `auto` before it resolves); nil for an agent that shows none.
 	effort: string?,
@@ -42,11 +44,13 @@ export type Agent = {
 }
 
 --- A pinned agent, as `tern.kv` keeps it: the pane id, with the working directory and the pane title as backup keys
---- for when the pane id changes (a daemon restart).
+--- for when the pane id changes (a daemon restart), and the omp session file the agent last reported: a pin finds
+--- the live agent that runs that session first, and a click on a pin whose agent stopped resumes it.
 export type Pin = {
 	pane: number,
 	cwd: string?,
 	title: string?,
+	sessionFile: string?,
 }
 
 --- A top-level omp session file, as the session reader found it.
@@ -165,9 +169,18 @@ local function plainTitle(title: string?): string?
 	return nonEmpty(string.match(title, "^[\128-\255]+%s+(.*)$") or title)
 end
 
--- The agent's own name: the pane title, else the folder name.
+-- The title as a row shows it: omp's icon character in front (it tells the session's context at a glance) is kept;
+-- nil when no text follows the icon.
+local function shownTitle(title: string?): string?
+	if not plainTitle(title) then
+		return nil
+	end
+	return nonEmpty(title)
+end
+
+-- The agent's own name: the pane title with omp's icon, else the folder name.
 local function ownName(agent: Agent): string
-	return plainTitle(agent.title)
+	return shownTitle(agent.title)
 		or (agent.cwd and nonEmpty(string.match(agent.cwd, "([^/]+)/*$")))
 		or "Agent"
 end
@@ -207,10 +220,12 @@ end
 local NO_SESSION_FILE = "omp has not reported a session file for this agent"
 
 -- Why Rename is off for `agent`, or nil when it is on. Rename sends omp's `/rename <title>` through the composer, so
--- it needs an omp agent (one that reported its session file) whose composer runs commands: not while omp shows a
--- subagent (the composer is that subagent's chat box then) or while the agent waits for an answer.
+-- it needs a running omp agent (one that reported its session file) whose composer runs commands: not while omp
+-- shows a subagent (the composer is that subagent's chat box then) or while the agent waits for an answer.
 local function renameOff(agent: Agent, viewingSub: boolean): string?
-	if not agent.sessionFile then
+	if agent.state == "exited" then
+		return "The agent is not running"
+	elseif not agent.sessionFile then
 		return "Only an omp session can be renamed, and this agent reported none"
 	elseif viewingSub then
 		return "omp shows a subagent: go back to the main session first"
@@ -338,14 +353,27 @@ local function effortFact(level: string): Node
 	return { k = "row", p = { gap = "sm" }, c = children }
 end
 
--- The hover card's model line: the provider's logo, when the table knows the model's maker, and the model.
-local function modelFact(model: string): Node
-	local provider = providers.of(model)
-	if not provider then
-		return fact("Model", model)
+-- omp's thinking levels, which a model route may end in (`:high`).
+local LEVELS = { off = true, minimal = true, low = true, medium = true, high = true, xhigh = true, max = true }
+
+-- One model, as `provider/model` without omp's routing suffixes: the `@<upstream>` pin and the `:<level>` thinking
+-- suffix (the effort has its own line). Nil for no model.
+local function modelRoute(model: string?): string?
+	local route = nonEmpty(model)
+	if not route then
+		return nil
 	end
-	local children: { Node } = { { k = "icon", p = { name = "provider-" .. provider } }, fact("Model", model) }
-	return { k = "row", p = { gap = "sm" }, c = children }
+	route = string.match(route, "^[^@]*") :: string
+	local base, suffix = string.match(route, "^(.*):(%a+)$")
+	if base and LEVELS[suffix] then
+		route = base
+	end
+	return nonEmpty(route)
+end
+
+-- How much of its task a subagent says it finished, as a whole percentage.
+local function progressFact(done: number): Node
+	return fact("Progress", string.format("%d%%", math.floor(done * 100 + 0.5)))
 end
 
 -- The mark at the right end of an agent row: the bell while it waits for the user, in neutral (the state dot
@@ -378,9 +406,10 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 	if mark then
 		table.insert(children, mark)
 	end
-	local model = plainModel(agent.model)
+	-- omp's session names the model with its provider; an agent without one (not omp) shows Tern's model name.
+	local model = modelRoute(agent.route) or plainModel(agent.model)
 	if model then
-		table.insert(card, modelFact(model))
+		table.insert(card, fact("Model", model))
 	end
 	local effort = nonEmpty(agent.effort)
 	if effort then
@@ -396,11 +425,15 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 		table.insert(card, { k = "md", p = { text = clip(message) } })
 	end
 	local pane = string.format("%.0f", agent.pane)
+	-- An exited agent (it shows only while pinned) has no program to focus: a click resumes its session.
+	local click = if agent.state == "exited" and agent.sessionFile
+		then "resume=" .. agent.sessionFile
+		else "focus=" .. pane
 	local props: { [string]: any } = {
 		key = "agent-" .. pane,
 		gap = "sm",
 		role = rowRole(if shared.focused == agent.pane then "on" else "item", depth),
-		actions = { click = "focus=" .. pane, menu = menu(agent, pane, pinned, shared.viewing[agent.pane] ~= nil) },
+		actions = { click = click, menu = menu(agent, pane, pinned, shared.viewing[agent.pane] ~= nil) },
 		hovercard = { k = "col", p = { gap = "xs" }, c = card },
 	}
 	return { k = "row", p = props, c = children }
@@ -476,8 +509,8 @@ local function startOrder(agents: { Agent }): { Agent }
 end
 
 --- The name each tab takes from its main agent, by tab id: the first agent in start order that sits in the tab and
---- has not exited, named as its row names it (the pane title without omp's icon, else the folder). Tabs without
---- such an agent are absent.
+--- has not exited, named as its row names it (the pane title with omp's icon, else the folder). Tabs without such
+--- an agent are absent.
 function viewModel.tabTitles(agents: { Agent }): { [number]: string }
 	local out: { [number]: string } = {}
 	for _, agent in startOrder(agents) do
@@ -700,14 +733,16 @@ local function subRow(
 	if parent then
 		table.insert(card, fact("Under", parent))
 	end
-	-- omp names a subagent's model with its route (`anthropic/claude-opus-5-5`); the model alone is enough.
-	local model = sub.model and nonEmpty(string.match(sub.model, "([^/]*)$"))
+	local model = modelRoute(sub.model)
 	if model then
 		table.insert(card, fact("Model", model))
 	end
 	local effort = nonEmpty(sub.effort)
 	if effort then
 		table.insert(card, effortFact(effort))
+	end
+	if sub.done then
+		table.insert(card, progressFact(sub.done))
 	end
 	local tool = nonEmpty(sub.tool)
 	if tool then
@@ -857,18 +892,31 @@ function viewModel.olderDue(input: Input): number?
 	return due
 end
 
--- Which agent each pin names, by the pin's index: the agent in the pin's pane when its working directory agrees,
--- else the first agent, in start order, that no other pin names and that has the pin's working directory and title.
+-- Which agent each pin names, by the pin's index: the running agent that has the pin's session file open, else the
+-- agent in the pin's pane when its working directory agrees, else the first agent, in start order, that no other pin
+-- names and that has the pin's working directory and title.
 local function matchPins(agents: { Agent }, pins: { Pin }): { [number]: Agent }
 	local byPane: { [number]: Agent } = {}
-	for _, agent in agents do
+	local byFile: { [string]: Agent } = {}
+	for _, agent in startOrder(agents) do
 		byPane[agent.pane] = agent
+		local file = agent.sessionFile
+		if file and agent.state ~= "exited" and byFile[file] == nil then
+			byFile[file] = agent
+		end
 	end
 	local matched: { [number]: Agent } = {}
 	local taken: { [Agent]: boolean } = {}
 	for i, pin in pins do
+		local agent = pin.sessionFile and byFile[pin.sessionFile]
+		if agent and not taken[agent] then
+			matched[i] = agent
+			taken[agent] = true
+		end
+	end
+	for i, pin in pins do
 		local agent = byPane[pin.pane]
-		if agent and not taken[agent] and (pin.cwd == nil or agent.cwd == pin.cwd) then
+		if not matched[i] and agent and not taken[agent] and (pin.cwd == nil or agent.cwd == pin.cwd) then
 			matched[i] = agent
 			taken[agent] = true
 		end
@@ -889,15 +937,21 @@ local function matchPins(agents: { Agent }, pins: { Pin }): { [number]: Agent }
 	return matched
 end
 
---- The pins with the pane id, working directory and title of the agent each one names now, so that the backup
---- keys follow the agent and a pin found by them takes its new pane id. A pin that names no agent stays as it is.
+--- The pins with the pane id, working directory, title and session file of the agent each one names now, so that
+--- the backup keys follow the agent and a pin found by them takes its new pane id. A pin that names no agent stays
+--- as it is.
 function viewModel.resolvePins(agents: { Agent }, pins: { Pin }): { Pin }
 	local matched = matchPins(agents, pins)
 	local out: { Pin } = {}
 	for i, pin in pins do
 		local agent = matched[i]
 		if agent then
-			table.insert(out, { pane = agent.pane, cwd = agent.cwd or pin.cwd, title = agent.title or pin.title })
+			table.insert(out, {
+				pane = agent.pane,
+				cwd = agent.cwd or pin.cwd,
+				title = agent.title or pin.title,
+				sessionFile = agent.sessionFile or pin.sessionFile,
+			})
 		else
 			table.insert(out, pin)
 		end
@@ -930,10 +984,10 @@ local function ago(seconds: number): string
 	return string.format("%dd", seconds // DAY)
 end
 
--- A closed session at `depth`: a hollow dot, its title (or "Untitled") and, at the right end, how long ago it was
--- last written. A click resumes it in a new tab; a right-click copies its ID or path.
+-- A closed session at `depth`: a hollow dot, its title with omp's icon (or "Untitled") and, at the right end, how
+-- long ago it was last written. A click resumes it in a new tab; a right-click copies its ID or path.
 local function sessionRow(session: Session, time: number?, depth: number): Node
-	local children: { Node } = { dotNode("dim", "Closed", true), nameNode(plainTitle(session.title) or "Untitled") }
+	local children: { Node } = { dotNode("dim", "Closed", true), nameNode(shownTitle(session.title) or "Untitled") }
 	if time then
 		local age = ago(math.max(0, time - session.at))
 		table.insert(children, { k = "text", p = { spans = { { t = age, s = "muted" } }, wrap = "none", role = ROLE.meta } })
@@ -1035,6 +1089,22 @@ end
 local function sameDir(a: string?, b: string?): boolean
 	local x, y = a and nonEmpty(a), b and nonEmpty(b)
 	return x ~= nil and y ~= nil and string.match(x, "^(.-)/*$") == string.match(y, "^(.-)/*$")
+end
+
+-- The newest session in `cwd` whose title is `title` (both without omp's icon); nil when none is, or either is
+-- unknown.
+local function titledSession(sessions: { Session }?, cwd: string?, title: string?): string?
+	local plain = plainTitle(title)
+	if not sessions or not plain then
+		return nil
+	end
+	local best: Session? = nil
+	for _, session in sessions do
+		if sameDir(session.cwd, cwd) and plainTitle(session.title) == plain and (best == nil or session.at > best.at) then
+			best = session
+		end
+	end
+	return best and best.file
 end
 
 -- The sessions no live agent has open, newest first. A session a process holds open is live; so is, for each live
@@ -1248,18 +1318,35 @@ local function liveBody(input: Input, shared: Shared): { Node }
 		local section: { Node } = { head("pin", "muted", "Pinned", #pins) }
 		for i, pin in pins do
 			local agent = matched[i]
-			if agent then
+			if agent and agent.state ~= "exited" then
 				table.insert(section, entry(agent, shared, subs[agent.pane], true, 1))
 			else
-				-- The pinned agent is gone: it shows as exited, from what the pin remembers. Its pane id may name
-				-- another agent now, so its click and menu name the pin, not the pane.
-				local ghost = row({ pane = pin.pane, state = "exited", title = pin.title, cwd = pin.cwd }, shared, true, 1)
-				local index = tostring(i)
-				local p = ghost.p :: { [string]: any }
-				p.key = "gone-" .. index
-				p.role = rowRole("item", 1)
-				p.actions = { click = "gone=" .. index, menu = { { id = "forget=" .. index, label = "Unpin", icon = "pin" } } }
-				table.insert(section, ghost)
+				-- The pinned agent stopped: its program exited, or its pane is gone and it shows from what the pin
+				-- remembers. A click resumes its session: the one it reported, else the one the pin remembers, else
+				-- the newest session of its folder with its title (a pin stored before pins kept the session file).
+				local stopped: Agent = if agent
+					then table.clone(agent)
+					else { pane = pin.pane, state = "exited", title = pin.title, cwd = pin.cwd }
+				stopped.sessionFile = stopped.sessionFile
+					or pin.sessionFile
+					or titledSession(input.sessions, stopped.cwd, stopped.title)
+				if agent then
+					table.insert(section, entry(stopped, shared, subs[agent.pane], true, 1))
+				else
+					-- Its pane id may name another agent now, so its Unpin names the pin, not the pane; with no
+					-- session file known, a click says the agent is gone.
+					local ghost = row(stopped, shared, true, 1)
+					local index = tostring(i)
+					local p = ghost.p :: { [string]: any }
+					p.key = "gone-" .. index
+					p.role = rowRole("item", 1)
+					local items = p.actions.menu :: { { [string]: any } }
+					items[1] = { id = "forget=" .. index, label = "Unpin", icon = "pin" }
+					if not stopped.sessionFile then
+						p.actions.click = "gone=" .. index
+					end
+					table.insert(section, ghost)
+				end
 			end
 		end
 		table.insert(children, { k = "col", p = { key = "pinned", gap = "none" }, c = section })

@@ -91,4 +91,20 @@ t.test("a path the scan writes as ./path names the same file in every record", f
 	t.eq(found[1].open, true)
 end)
 
+t.test("each session's main model is its last model_change of the default role, as provider/model", function()
+	local a, b = DIR .. "/" .. FILE, DIR .. "/-Work-x/2026-11-10T09-00-00-000Z_02b2.jsonl"
+	local function change(path: string, model: string, role: string?): string
+		local extra = if role then ',"role":"' .. role .. '"' else ""
+		return path .. ':{"type":"model_change","id":"c1","model":"' .. model .. '"' .. extra .. "}"
+	end
+	local out = sessions.models(table.concat({
+		change(a, "anthropic/claude-opus-5-5"),
+		change(a, "openai/gpt-5.1", "smol"),
+		change(a, "anthropic/claude-sonnet-5", "default"),
+		change(b, "openai/gpt-5.1"),
+		b .. ':{"type":"message","text":"model_change"}',
+	}, "\n"))
+	t.eq(out, { [a] = "anthropic/claude-sonnet-5", [b] = "openai/gpt-5.1" })
+end)
+
 return nil

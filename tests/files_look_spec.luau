@@ -124,7 +124,7 @@ t.test("a working agent row ends in nothing and a waiting one in a bell; model, 
 		"●(Waiting for you) b :bell",
 		"●(Idle) c",
 	})
-	t.eq(visible.hover(out, "(Working) a"), "a · Working\n:provider-anthropic Model Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
+	t.eq(visible.hover(out, "(Working) a"), "a · Working\nModel Opus 5.5\n◔high Effort high\nWorking for ⏱12s")
 	t.eq(visible.hover(out, "(Idle) c"), "c · Idle\nModel Kimi K2")
 end)
 

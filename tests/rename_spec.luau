@@ -59,7 +59,7 @@ t.test("a working agent can be renamed", function()
 	t.eq(menu[2], "Rename → rename=2")
 end)
 
-t.test("subagent rows, closed session rows and a gone pin offer no Rename", function()
+t.test("subagent rows and closed session rows offer no Rename, and a gone pin's Rename is off", function()
 	local v = view({
 		agents = { agent({ state = "working", workingSince = 0 }) },
 		subagents = { [2] = { agents = { { id = "dx.Ticket07", name = "Ticket07", status = "running", depth = 1 } } } },
@@ -68,9 +68,7 @@ t.test("subagent rows, closed session rows and a gone pin offer no Rename", func
 	for _, line in visible.menu(v, "Ticket07") do
 		t.eq(string.find(line, "Rename", 1, true), nil)
 	end
-	for _, line in visible.menu(v, "gone") do
-		t.eq(string.find(line, "Rename", 1, true), nil)
-	end
+	t.eq(visible.menu(v, "gone")[2], "Rename → rename (off: The agent is not running)")
 end)
 
 t.test("the field starts with the title without omp's icon", function()

@@ -39,9 +39,11 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   `~/.omp/agent/sessions`, their last writes and the ones a process holds open; it keeps the result with each
   session's repo. A second `tern.process.run`, of `tern inspect --json` (with each scan, when an agent appears and
   when an agent's pane retitles itself), reads the session file each pane's omp reported to Tern
-  (`omp_session_file`): a live agent's session.
+  (`omp_session_file`): a live agent's session. After each of those reads, one `grep` of the reported files reads
+  their `model_change` entries: the main agent's model as `provider/model`, which its hover card shows.
 - `lib/sessions.luau`: the pure parser of that scan's output (path, id, working directory, title, last write, open),
-  of the `tern inspect` answer (session file by pane) and of a session file's header id.
+  of the `tern inspect` answer (session file by pane), of the `model_change` entries (model by file) and of a
+  session file's header id.
 - `lib/session_copy.luau`: what "Copy session ID" and "Copy session path" copy (the header's id or the file's path)
   and the toast that says so, from the start of the file.
 - `lib/subagent_reader.luau`: the subagent reader. On each tick it reads the TSP surface of one working agent, in
@@ -53,8 +55,8 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   final status, and the agent does not show.
 - `lib/subagents.luau`: pure helpers for the reader: find the running and the ended `task` nodes and turn their
   `agent` nodes, at every nesting level, into subagents (node id, name, state, depth, parent, type, effort, model,
-  tool); from an ended call, only the agents that run again. It uses no `if … then … else` expression, so a Carly
-  probe can `loadstring` it.
+  tool, the completion estimate `stats.done`); from an ended call, only the agents that run again. It uses no
+  `if … then … else` expression, so a Carly probe can `loadstring` it.
 - `lib/hud.luau`: the pure reader of omp's HUD agents counter in a read of the dock (`…running/agents`): whether the
   session has running subagents, so that the reader polls an idle agent again after a plugin reload.
 - `lib/effort_reader.luau`: the effort reader. On `agent_state`, `agent_finished` and at start (never on the tick) it
@@ -71,7 +73,6 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   top-right pane), which copies close, and which copies need a resize to the shared width.
 - `lib/patch.luau`: the pure patch diff: the keyed `cx.canvas:set` patch from the view a copy shows to a new one.
   Keys must not contain `.`: a path cannot name them, so their parent goes whole.
-- `lib/providers.luau`: the provider table (model name → provider logo id).
 - `lib/back_to_main.luau`: the pure finder of omp's "Back to the main session" action in a read of a pane's dock
   (a node id ending in `focus/exit` with a `focus:` click), which a click on a main agent's row runs.
 - `lib/viewing.luau`: pure helpers for omp's subagent view, from a read of a pane's dock: which subagent omp shows,
@@ -86,7 +87,7 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   resolve to their main repo). It reads the file system through the functions it gets, and caches each answer.
 - `tests/`: the view-model (rows, the Files look: head, ⋯ menu, view strip, folder rows, tree levels; groups, folded
   folders, pins, exited agents, Older, Recent, Recent folders, Needs you, status counts, toasts, tab titles),
-  session-scan, provider-table, new-tab, back-to-main, subagent view and click, repo-resolver, subagent, effort,
+  session-scan, new-tab, back-to-main, subagent view and click, repo-resolver, subagent, effort,
   placement, patch, turn-start, copy-session (the menu items of every session row, the copied text, the reported
   session files) and rename (the menu item, when it is off, the command and its `send` event) tests.
   `tests/run.luau` runs them all.

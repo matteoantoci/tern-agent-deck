@@ -176,4 +176,22 @@ function sessions.reported(inspect: any): { [number]: string }
 	return out
 end
 
+--- The model of each session's main agent as `provider/model`, by file, from the output of
+--- `grep -H '"type":"model_change"' <files>`: one `<path>:<entry>` line per match, oldest first in each file. The
+--- last entry of the default role (no `role`, or `default`) wins; a file without one is absent.
+function sessions.models(output: string): { [string]: string }
+	local out: { [string]: string } = {}
+	for line in string.gmatch(output, "[^\n]+") do
+		local path, entry = string.match(line, "^(.-):({.*)$")
+		if path and entry and kind(entry) == "model_change" then
+			local role = field(entry, "role")
+			local model = field(entry, "model")
+			if model and model ~= "" and (role == nil or role == "default") then
+				out[path] = model
+			end
+		end
+	end
+	return out
+end
+
 return sessions

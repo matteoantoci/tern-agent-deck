@@ -5,7 +5,6 @@
 local t = require("./harness")
 
 require("./view_model_spec")
-require("./providers_spec")
 require("./patch_spec")
 require("./placement_spec")
 require("./repo_root_spec")

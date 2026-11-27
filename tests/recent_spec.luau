@@ -89,8 +89,8 @@ t.test("an open folder lists its sessions newest first, with the title, or Untit
 		HEAD(4),
 		"○(Closed) Untitled now",
 		"○(Closed) Untitled 5m",
-		"○(Closed) Fix login 2h",
-		"○(Closed) Plan the sidebar 3d",
+		"○(Closed) " .. ICON .. "Fix login 2h",
+		"○(Closed) " .. ICON .. "Plan the sidebar 3d",
 	})
 end)
 
@@ -130,7 +130,7 @@ t.test("the session of a live agent, found by its working directory and title, d
 	})), {
 		HEAD(2),
 		"○(Closed) Plan 1h",
-		"○(Closed) Live chat 1d",
+		"○(Closed) " .. ICON .. "Live chat 1d",
 	})
 end)
 
@@ -144,7 +144,7 @@ end)
 t.test("an exited agent's session shows", function()
 	t.eq(visible.rows(view({ agent({ pane = 1, title = "Other" }), agent({ pane = 2, state = "exited" }) }, {
 		session(1, ICON .. "Live chat", MIN),
-	})), { HEAD(1), "○(Closed) Live chat 1m" })
+	})), { HEAD(1), "○(Closed) " .. ICON .. "Live chat 1m" })
 end)
 
 t.test("a session started in a subfolder or worktree shows under its main repo", function()
@@ -169,7 +169,7 @@ t.test("the Live view lists no closed session, and a folded folder there shows o
 	local sessions = { session(1, "Plan", HOUR) }
 	t.eq(visible.rows(view(agents, sessions, { view = "live" })), {
 		":chev :mi-folder-open tern-agents 2 [:plus](New tab in this repo)",
-		"●(Idle) Live chat",
+		"●(Idle) " .. ICON .. "Live chat",
 		":chev-r Older 1",
 	})
 	t.eq(visible.rows(view(agents, sessions, { view = "live", folded = { [KEY] = true } })), {
