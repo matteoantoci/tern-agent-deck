@@ -3,7 +3,8 @@
 -- in rotation, and takes its subagents from omp's tray there (`subagents.fromTray`). One read scoped to the dock
 -- also tells which subagent omp shows (`viewing.agent`). An agent that is not polled has its dock checked every
 -- `CHECK_AFTER`, one a tick, so that an idle agent whose subagents still run (omp runs them in the background) is
--- found, also after a plugin reload.
+-- found, also after a plugin reload. A live agent keeps the subagents of its last read when none runs, so that its
+-- row can show how many are done and its failed ones.
 
 local subagents = require("./subagents")
 local viewing = require("./viewing")
@@ -15,7 +16,7 @@ local DOCK_NODES = 3000
 -- A live agent that is not polled has its dock checked once this many milliseconds, at most one such check a tick.
 local CHECK_AFTER = 5000
 
--- The subagents of each polled agent, while it works or one of them runs.
+-- The subagents of each live agent, as its last read found them, with the time each one's state began.
 local found: { [number]: subagents.Subagents } = {}
 -- The omp id of the subagent each agent's omp shows in its view, by pane.
 local shown: { [number]: string } = {}
@@ -24,7 +25,7 @@ local checkedAt: { [number]: number } = {}
 -- The agent the last tick read.
 local last: number? = nil
 
---- The subagents of each polled agent, by pane: the view model's `subagents` input.
+--- The subagents of each live agent that has any, by pane: the view model's `subagents` input.
 function reader.subagents(): { [number]: subagents.Subagents }
 	return found
 end
@@ -42,8 +43,10 @@ local function dock(cx: WindowCx, pane: number): any
 	return if ok then tree else nil
 end
 
--- Stores `subs` as `pane`'s subagents (none when nil); returns whether that changed them.
-local function store(pane: number, subs: subagents.Subagents?): boolean
+-- Stores `subs` as `pane`'s subagents (none when nil), each with the time its state began (`clock` for a change since
+-- the last read); returns whether that changed them.
+local function store(pane: number, subs: subagents.Subagents?, clock: number): boolean
+	subs = subagents.stamp(found[pane], subs, clock)
 	if subagents.same(found[pane], subs) then
 		return false
 	end
@@ -69,14 +72,17 @@ function reader.step(cx: WindowCx, clock: number): (boolean, boolean)
 		if block.state ~= "exited" then
 			live[block.pane] = true
 		end
-		if block.state == "working" or (block.state ~= "exited" and (found[block.pane] ~= nil or shown[block.pane] ~= nil)) then
+		if
+			block.state == "working"
+			or (block.state ~= "exited" and (subagents.anyRunning(found[block.pane]) or shown[block.pane] ~= nil))
+		then
 			table.insert(polled, block.pane)
 			isPolled[block.pane] = true
 		end
 	end
 	local changed = false
 	for pane in found do
-		if not isPolled[pane] then
+		if not live[pane] then
 			found[pane] = nil
 			changed = true
 		end
@@ -107,10 +113,7 @@ function reader.step(cx: WindowCx, clock: number): (boolean, boolean)
 	end
 	if due then
 		checkedAt[due] = clock
-		local subs = subagents.fromTray(dock(cx, due))
-		if subagents.anyRunning(subs) then
-			changed = store(due, subs) or changed
-		end
+		changed = store(due, subagents.fromTray(dock(cx, due)), clock) or changed
 	end
 	local pending = false
 	for pane in live do
@@ -134,21 +137,14 @@ function reader.step(cx: WindowCx, clock: number): (boolean, boolean)
 		changed = true
 	end
 	-- A pane that closed or shows no TSP surface (Claude Code, Codex) reads no tray: no subagents, except that while
-	-- omp shows a subagent the last ones read stay, frozen.
+	-- omp shows a subagent the last ones read stay, frozen. With none running, omp's tray lists every finished agent
+	-- of the session as its own card, also those of earlier turns; while one runs, older ones fold into one `done`
+	-- card (no subagent).
 	local subs = subagents.fromTray(tree)
-	local now: subagents.Subagents? = nil
-	if subs then
-		-- Rows show only while a subagent runs: with none running, omp's tray lists every finished agent of the
-		-- session as its own card, also those of earlier turns. While one runs, older ones fold into one `done` card
-		-- (no subagent), so the finished line counts only recent siblings.
-		if subagents.anyRunning(subs) then
-			now = subs
-		end
-	else
-		now = viewing.keep(found[pane], nil, viewed)
-	end
-	changed = store(pane, now) or changed
-	return changed, #polled > 1 or working[pane] == true or found[pane] ~= nil or shown[pane] ~= nil or pending
+	local now = if subs then subs else viewing.keep(found[pane], nil, viewed)
+	changed = store(pane, now, clock) or changed
+	local more = #polled > 1 or working[pane] == true or subagents.anyRunning(found[pane]) or shown[pane] ~= nil
+	return changed, more or pending
 end
 
 return reader

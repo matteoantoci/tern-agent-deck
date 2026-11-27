@@ -35,6 +35,9 @@ export type Subagent = {
 	intent: string?,
 	--- Running, but only waiting on its own subagents.
 	waiting: boolean?,
+	--- `tern.now()` when its state began, as the reader saw it (`subagents.stamp`): when it started, while it runs
+	--- or is queued; when it ended, once it finished. Nil when the reader saw it only finished.
+	since: number?,
 }
 
 --- The subagents of one agent, in tree order (each one before the subagents it runs); `incomplete` when the node
@@ -235,17 +238,48 @@ function subagents.fromTray(tree: any): Subagents?
 	return { agents = found, incomplete = seen.more }
 end
 
+-- Whether `sub` runs or waits in the queue.
+local function active(sub: Subagent): boolean
+	return sub.status == "running" or sub.status == "pending"
+end
+
 --- Whether any of `subs` runs.
 function subagents.anyRunning(subs: Subagents?): boolean
 	if subs == nil then
 		return false
 	end
 	for _, sub in subs.agents do
-		if sub.status == "running" or sub.status == "pending" then
+		if active(sub) then
 			return true
 		end
 	end
 	return false
+end
+
+--- Sets on each subagent of `read` the time its state began (`since`), from `last`, the read before it: a subagent
+--- that still runs, or that had finished already, keeps its time; one that started or finished since `last` gets
+--- `clock`; one that `last` did not list and that has finished has no time (its end is not known). Returns `read`.
+function subagents.stamp(last: Subagents?, read: Subagents?, clock: number): Subagents?
+	if read == nil then
+		return nil
+	end
+	local before: { [string]: Subagent } = {}
+	if last then
+		for _, sub in last.agents do
+			before[sub.id] = sub
+		end
+	end
+	for _, sub in read.agents do
+		local prev = before[sub.id]
+		if prev and active(prev) == active(sub) then
+			sub.since = prev.since
+		elseif prev or active(sub) then
+			sub.since = clock
+		else
+			sub.since = nil
+		end
+	end
+	return read
 end
 
 --- The subagent with omp id `id` among `subs`; nil when none has it.

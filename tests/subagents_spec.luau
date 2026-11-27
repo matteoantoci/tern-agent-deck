@@ -105,9 +105,10 @@ t.test("an agent revived after a done sibling shows as running", function()
 	local view = viewModel.build({
 		agents = { { pane = 7, state = "idle", cwd = "/repo", title = "Lead" } },
 		now = 0,
+		focused = 7,
 		subagents = { [7] = subs :: any },
 	}).view
-	t.eq(visible.agentRows(view), { ":sparkle(Idle) Lead", "●(Running) Scan", ":check 1 subagent done" })
+	t.eq(visible.agentRows(view), { ":sparkle(Idle) Lead [▮]", "■(Done) Copy", "■(Running) Scan" })
 end)
 
 t.test("the main agent's helper cards and cards of other items are no subagents", function()
@@ -182,9 +183,27 @@ t.test("a click finds its subagent by its omp id, and none once it is gone", fun
 	local view = viewModel.build({
 		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
 		now = 0,
+		focused = 7,
 		subagents = { [7] = subs :: any },
 	}).view
 	t.eq(visible.click(view, "Fix"), "subagent=7 Lead.Fix")
+end)
+
+t.test("each subagent's time counts from when the reader saw its state begin", function()
+	local function since(subs: any): { string }
+		local out = {}
+		for _, sub in subs.agents do
+			table.insert(out, sub.name .. " " .. tostring(sub.since))
+		end
+		return out
+	end
+	local first = subagents.stamp(nil, subagents.fromTray(dock({ card("Old", "done"), card("Run", "running") })), 1000)
+	t.eq(since(first), { "Old nil", "Run 1000" }, "a sub first seen finished has no time")
+	local second = subagents.stamp(first, subagents.fromTray(dock({ card("Old", "done"), card("Run", "running") })), 2000)
+	t.eq(since(second), { "Old nil", "Run 1000" }, "a sub in the same state keeps its time")
+	local third = subagents.stamp(second, subagents.fromTray(dock({ card("Old", "done"), card("Run", "done") })), 3000)
+	t.eq(since(third), { "Old nil", "Run 3000" }, "a sub that ended counts from its end")
+	t.eq(subagents.stamp(third, nil, 4000), nil)
 end)
 
 return nil
