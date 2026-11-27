@@ -190,6 +190,8 @@ type Shared = {
 	subsOpen: { [number]: boolean },
 	--- What each live omp session cost, by session file.
 	cost: { [string]: Cost },
+	--- How many more subagent lines the view can draw (see `VIEW_SUB_LINES`); each agent's lines take from it.
+	subLines: number,
 }
 
 local function nonEmpty(text: string?): string?
@@ -1171,24 +1173,31 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 	}
 end
 
--- An agent draws at most this many subagent lines: with none running, omp's tray lists every finished subagent of
--- the session, and a canvas update holds at most 2000 nodes and 256 KiB.
+-- An agent draws at most this many subagent lines, and the whole view at most `VIEW_SUB_LINES`, in the order the
+-- agents show: with none running, omp's tray lists every finished subagent of the session, and a canvas update holds
+-- at most 2000 nodes and 256 KiB. A line with its hover card is about 10 nodes.
 local SUB_LINES = 20
+local VIEW_SUB_LINES = 100
 
--- The subagents of `subs` that get a line, at most `SUB_LINES`: first the one the pane shows and the ones not
--- finished well or stopped (running, waiting, queued, failed), then the newest finished ones. Also how many get none.
-local function drawnSubs(subs: subagents.Subagents, shown: string?): ({ [subagents.Subagent]: boolean }, number)
-	local candidates: { { sub: subagents.Subagent, index: number, urgent: boolean } } = {}
+-- The subagents of `subs` that get a line, at most `limit`: first the one the pane shows, then the failed ones (a
+-- failure never hides), then the others not finished (running, waiting, queued), then the newest finished ones. Also
+-- how many get none.
+local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
+	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
 	for index, sub in subs.agents do
 		if sub.depth <= MAX_DEPTH then
-			local urgent = (sub.status ~= "done" and sub.status ~= "aborted") or viewing.shows(sub, shown)
-			table.insert(candidates, { sub = sub, index = index, urgent = urgent })
+			local rank = if viewing.shows(sub, shown)
+				then 3
+				elseif sub.status == "failed" then 2
+				elseif sub.status ~= "done" and sub.status ~= "aborted" then 1
+				else 0
+			table.insert(candidates, { sub = sub, index = index, rank = rank })
 		end
 	end
-	if #candidates > SUB_LINES then
+	if #candidates > limit then
 		table.sort(candidates, function(a, b)
-			if a.urgent ~= b.urgent then
-				return a.urgent
+			if a.rank ~= b.rank then
+				return a.rank > b.rank
 			end
 			local sa, sb = a.sub.since or -math.huge, b.sub.since or -math.huge
 			if sa ~= sb then
@@ -1198,17 +1207,18 @@ local function drawnSubs(subs: subagents.Subagents, shown: string?): ({ [subagen
 		end)
 	end
 	local drawn: { [subagents.Subagent]: boolean } = {}
-	for k = 1, math.min(SUB_LINES, #candidates) do
+	for k = 1, math.min(limit, #candidates) do
 		drawn[candidates[k].sub] = true
 	end
-	return drawn, math.max(0, #candidates - SUB_LINES)
+	return drawn, math.max(0, #candidates - limit)
 end
 
 -- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
 -- down per nesting level: every one while the lines are open (`agents.strip.open`), else only the failed ones (a
--- failure never hides), at most `SUB_LINES` of them (see `drawnSubs`) and then a muted "+N more" line. A warning
--- line says when Tern cut the read, and one that +N running subagents sit past the levels omp renders. This tab's
--- agent, and its open lines, are one block, which `agents.css` draws with the accent.
+-- failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see
+-- `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
+-- subagents sit past the levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css`
+-- draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1226,7 +1236,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	-- While the lines are open, the subagent the focused pane's omp shows takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
-	local drawn, past = drawnSubs(subs, if open then shown else nil)
+	local drawn, past = drawnSubs(subs, if open then shown else nil, math.min(SUB_LINES, shared.subLines))
 	for _, sub in subs.agents do
 		local selected = open and viewing.shows(sub, shown)
 		if selected then
@@ -1240,6 +1250,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 			local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
 			table.insert(if open then lines else failed, line)
+			shared.subLines -= 1
 		end
 	end
 	if open and past > 0 then
@@ -1775,6 +1786,7 @@ local function context(input: Input): Shared
 		routes = input.routes or {},
 		cost = input.cost or {},
 		subsOpen = input.subsOpen or {},
+		subLines = VIEW_SUB_LINES,
 	}
 	for _, agent in input.agents do
 		if agent.tab then

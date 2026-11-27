@@ -337,4 +337,57 @@ t.test("the head holds only the Live/Recent switch, Live by default; a click sho
 	t.eq(visible.press(live, "Live"), "view=live")
 end)
 
+t.test("a full Live view of 10 agents with open crews and cards fits one canvas update", function()
+	-- A canvas update holds at most 2000 nodes, hover-card nodes included, and 256 KiB.
+	local states = { "waiting_input", "waiting_input", "waiting_input", "working", "working", "working", "working", "idle", "idle", "idle" }
+	local message = string.rep("The change touches lib/view_model.luau and tests/live_zones_spec.luau; ", 30)
+	local agents: { any } = {}
+	local subs: { [number]: any } = {}
+	local open: { [number]: boolean } = {}
+	for pane = 1, 10 do
+		local project = "/Users/me/Personal/project-with-a-long-name-" .. (pane % 4)
+		table.insert(agents, agent({
+			pane = pane,
+			state = states[pane],
+			cwd = project,
+			repo = project,
+			title = ICON .. " Agent " .. pane .. " with a title of usual length",
+			tab = 944892805168 + pane,
+			tabNumber = pane,
+			tabName = "Tab " .. pane,
+			model = "claude-opus-5-5",
+			route = "anthropic/claude-opus-5-5",
+			effort = "high",
+			lastMessage = message,
+			summary = "It changed the view model and its tests; both pass.",
+			workingSince = 0,
+			activeAt = NOW - 60,
+			sessionFile = "/Users/me/.omp/agent/sessions/-Personal-project/2026-11-27T08-21-12-853Z_01a1bf65-95ef-77f9-baad-ec9dc64f" .. pane .. ".jsonl",
+		}))
+		local crew: { any } = {}
+		for i = 1, 40 do
+			local status = if i <= 6 then "running" elseif i == 7 then "failed" else "done"
+			table.insert(crew, {
+				id = "Sub" .. i,
+				name = "Sub" .. i,
+				status = status,
+				depth = 1,
+				waiting = i == 1,
+				role = "task",
+				model = "claude-opus-5-5",
+				effort = "high",
+				intent = "Read /Users/me/Personal/tern-agent-deck/lib/view_model.luau and report what it does " .. i,
+				since = i,
+			})
+		end
+		subs[pane] = { agents = crew, incomplete = false }
+		open[pane] = true
+	end
+	local out = view(agents, { subagents = subs, subsOpen = open, focused = 4 })
+	t.eq(#visible.cards(out) >= 3, true)
+	local nodes, bytes = visible.size(out)
+	t.eq(nodes < 2000, true)
+	t.eq(bytes < 256 * 1024, true)
+end)
+
 return nil
