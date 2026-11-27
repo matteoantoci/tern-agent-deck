@@ -73,9 +73,13 @@ end
 
 --- The quotas in `output` whose window resets after `now` (wall-clock milliseconds), in the order of the output;
 --- a row with a status the plugin does not know is left out. Nil when a line has another shape (another schema, or
---- an error message), so that the sidebar shows no quota line rather than a wrong one.
+--- an error message), so that the sidebar shows no quota line rather than a wrong one. An account named as its
+--- provider (`claude@…` for Claude) shows no name, unless another account of that provider would then read the
+--- same: then it shows its email's domain.
 function quotas.parse(output: string, now: number): { viewModel.Quota }?
 	local found: { viewModel.Quota } = {}
+	local emails: { string } = {}
+	local dropped: { [number]: string } = {}
 	for line in string.gmatch(output, "[^\n]+") do
 		local fields = split(line)
 		if #fields ~= FIELDS then
@@ -90,8 +94,13 @@ function quotas.parse(output: string, now: number): { viewModel.Quota }?
 		local status: Status? = STATUS[statusText]
 		if status and resetsAt and resetsAt > now then
 			local account = string.match(email, "^([^@]+)")
+			local display = PROVIDER[provider] or provider
+			if account and string.lower(account) == string.lower(display) then
+				dropped[#found + 1] = string.match(email, "@(.+)$") or account
+				account = nil
+			end
 			local quota: viewModel.Quota = {
-				provider = PROVIDER[provider] or provider,
+				provider = display,
 				account = account,
 				label = label(windowLabel, limit),
 				used = used,
@@ -99,6 +108,24 @@ function quotas.parse(output: string, now: number): { viewModel.Quota }?
 				resetsAt = resetsAt,
 			}
 			table.insert(found, quota)
+			table.insert(emails, string.lower(email))
+		end
+	end
+	-- The emails of each provider whose quotas show no account name.
+	local nameless: { [string]: { [string]: boolean } } = {}
+	for i, quota in found do
+		if not quota.account then
+			local set = nameless[quota.provider] or {}
+			set[emails[i]] = true
+			nameless[quota.provider] = set
+		end
+	end
+	for i, domain in dropped do
+		for email in nameless[found[i].provider] do
+			if email ~= emails[i] then
+				found[i].account = domain
+				break
+			end
 		end
 	end
 	return found

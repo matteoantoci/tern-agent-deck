@@ -112,6 +112,25 @@ t.test("this tab's agent shows its subagent lines open until the user closes the
 	t.eq(visible.agentRows(view("working", subs, { focused = 7, open = { [7] = false } })), { ":sparkle(Working) Lead [▮] 0s" })
 end)
 
+t.test("this tab's agent shows its lines closed when every subagent is done or failed, unless the user opened them", function()
+	local subs = { sub("A", "done"), sub("B", "done"), sub("C", "failed") }
+	t.eq(visible.agentRows(view("idle", subs, { focused = 7 })), { ":sparkle(Idle) Lead [2 done]", "■(Failed) C failed" })
+	t.eq(visible.button(view("idle", subs, { focused = 7 }), "Lead"), "subs=7 open")
+	t.eq(#visible.agentRows(view("idle", subs, { focused = 7, open = OPEN })), 4)
+	local waiting = { sub("A", "done"), sub("B", "running", 1, { waiting = true }) }
+	t.eq(visible.button(view("working", waiting, { focused = 7 }), "Lead"), "subs=7 closed")
+end)
+
+t.test("a done subagent line shows its square, its name and its time only; the other lines keep their call", function()
+	local subs = {
+		sub("A", "done", 1, { intent = "Conflicts: none; the merge was clean", since = -60000 }),
+		sub("B", "running", 1, { intent = "edit x" }),
+		sub("C", "failed", 1, { intent = "build" }),
+	}
+	local rows = visible.agentRows(view("working", subs, { open = OPEN }))
+	t.eq({ rows[2], rows[3], rows[4] }, { "■(Done) A 1m", "■(Running) B edit x", "■(Failed) C build" })
+end)
+
 -- The zone head and the project label above Lead's row, as `visible.tree` shows them.
 local HEAD = { "■ Working 1 busy", "repo [:plus](New tab in this folder)" }
 

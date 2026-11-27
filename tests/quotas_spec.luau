@@ -73,7 +73,26 @@ t.test("two accounts of one provider stay two quotas", function()
 	})
 	t.eq(#found, 2)
 	t.eq({ found[1].provider, found[1].account, found[1].status }, { "Claude", "matteo", "exhausted" })
-	t.eq({ found[2].provider, found[2].account, found[2].status }, { "Claude", "claude", "ok" })
+	t.eq({ found[2].provider, found[2].status }, { "Claude", "ok" })
+	t.eq(found[2].account, nil)
+end)
+
+t.test("an account named as its provider shows no name, in any case", function()
+	local found = parse({
+		row({ "anthropic", "Claude@home.it", "5 Hour", "Claude 5 Hour", 1.0, "exhausted", NOW + DAY }),
+		row({ "anthropic", "claude@home.it", "7 Day", "Claude 7 Day", 0.5, "ok", NOW + DAY }),
+	})
+	t.eq({ found[1].account, found[2].account }, { nil, nil })
+end)
+
+t.test("an account named as its provider shows its email's domain when another account would read the same", function()
+	local found = parse({
+		row({ "anthropic", "claude@work.com", "7 Day", "Claude 7 Day", 1.0, "exhausted", NOW + DAY }),
+		row({ "anthropic", "claude@home.it", "7 Day", "Claude 7 Day", 0.47, "ok", NOW + DAY }),
+		row({ "xai", "grok@x.com", "Weekly", "Weekly", 0.1, "ok", NOW + DAY }),
+	})
+	t.eq({ found[1].account, found[2].account }, { "work.com", "home.it" })
+	t.eq(found[3].account, nil)
 end)
 
 t.test("the known providers take their display names, and an unknown one keeps its own", function()
