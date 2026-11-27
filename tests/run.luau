@@ -28,6 +28,7 @@ require("./new_tab_spec")
 require("./back_to_main_spec")
 require("./viewing_spec")
 require("./show_subagent_spec")
+require("./state_colors_spec")
 require("./copy_session_spec")
 
 t.run()

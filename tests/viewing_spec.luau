@@ -75,6 +75,7 @@ t.test("while omp shows a subagent, its agent keeps the subagent rows and the sh
 	})
 	t.eq(visible.selected(out), { "●(Running) Ticket07 task" })
 	t.eq(visible.hover(out, "Ticket03"), "Ticket03 · Not live\nRole task\nNot updated while omp shows another subagent")
+	t.eq(visible.state(out, "Ticket03"), "frozen")
 end)
 
 t.test("the dots of working agents and running subagents pulse; a not-live subagent's dot stays still", function()
