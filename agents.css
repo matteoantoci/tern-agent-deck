@@ -73,6 +73,17 @@
 	box-shadow: inset 0 -1px 0 var(--t1);
 }
 
+/* The waiting mark and the number of Needs you cards, 4px after Live (the switch keeps 16px between its views). */
+[data-role='agents.views'] > :is([data-role='agents.square.waiting'], [data-role='agents.needs']) {
+	margin-left: -12px;
+}
+
+[data-role='agents.views'] > [data-role='agents.needs'] {
+	font: 400 12px/16px var(--tv-font, var(--mono));
+	font-variant-numeric: tabular-nums;
+	color: var(--t2);
+}
+
 [data-role='agents.body'] {
 	padding-bottom: 8px;
 }
@@ -431,6 +442,53 @@
 	margin-left: auto;
 	font: 400 12px/16px var(--tv-font, var(--mono));
 	font-variant-numeric: tabular-nums;
+	color: var(--t3);
+}
+
+/* A Needs you card: a neutral hairline card with no fill; the waiting color is only on its title icon and its wait
+   time. The whole card takes the click. */
+[data-role='agents.root'] [data-role='agents.card'] {
+	margin: 0 8px 8px;
+	padding: 8px;
+	gap: 4px;
+	border-radius: var(--r-card);
+	box-shadow: inset 0 0 0 1px var(--l2);
+	cursor: pointer;
+}
+
+[data-role='agents.root'] [data-role='agents.card']:hover {
+	box-shadow: inset 0 0 0 1px var(--t4);
+}
+
+[data-role='agents.card'] [data-role='agents.name'] {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: var(--t1);
+}
+
+[data-role='agents.time.waiting'] {
+	flex: none;
+	margin-left: auto;
+	font: 400 12px/16px var(--tv-font, var(--mono));
+	font-variant-numeric: tabular-nums;
+	color: var(--warn);
+}
+
+[data-role='agents.question'] {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
+	color: var(--t2);
+}
+
+[data-role='agents.footer'] {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: 11px;
 	color: var(--t3);
 }
 

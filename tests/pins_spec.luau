@@ -184,7 +184,7 @@ t.test("the right-click menu offers Pin and Interrupt, and Interrupt only while 
 	})
 	menu = visible.menu(v, "build")
 	t.eq({ menu[1], menu[#menu] }, { "Pin → pin=2", "Interrupt → interrupt=2" })
-	menu = visible.menu(v, "ask")
+	menu = visible.cardMenu(v, "ask")
 	t.eq({ menu[1], menu[#menu] }, { "Pin → pin=3", "Interrupt → interrupt=3" })
 end)
 
