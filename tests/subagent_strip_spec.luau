@@ -38,7 +38,7 @@ t.test("the strip shows one bar per running subagent at every level; waiting, qu
 		sub("E", "running", 1, { waiting = true }),
 		sub("F", "pending"),
 	})
-	t.eq(visible.agentRows(out), { ":bot(Working) Lead [▮ ▮] 0s" })
+	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead [▮ ▮] 0s" })
 	t.eq(visible.bars(out, "Lead"), { "running", "running" })
 end)
 
@@ -48,24 +48,24 @@ t.test("the strip shows at most 8 bars, then +N", function()
 		table.insert(subs, sub("S" .. i, "running"))
 	end
 	local out = view("working", subs)
-	t.eq(visible.agentRows(out), { ":bot(Working) Lead [▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ +3] 0s" })
+	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead [▮ ▮ ▮ ▮ ▮ ▮ ▮ ▮ +3] 0s" })
 	t.eq(#visible.bars(out, "Lead"), 8)
 end)
 
 t.test("an agent with subagents but none running shows N done in the strip's place", function()
 	local out = view("idle", { sub("A", "done"), sub("B", "done"), sub("C", "aborted") })
-	t.eq(visible.agentRows(out), { ":bot(Idle) Lead [2 done]" })
+	t.eq(visible.agentRows(out), { ":sparkle(Idle) Lead [2 done]" })
 	t.eq(visible.bars(out, "Lead"), {})
 end)
 
 t.test("an agent with no subagents has no strip", function()
-	t.eq(visible.agentRows(view("working", {})), { ":bot(Working) Lead 0s" })
+	t.eq(visible.agentRows(view("working", {})), { ":sparkle(Working) Lead 0s" })
 	t.eq(visible.button(view("working", {}), "Lead"), nil)
 	t.eq(visible.agentRows(viewModel.build({
 		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
 		now = 0,
 		subagents = {},
-	}).view), { ":bot(Working) Lead 0s" })
+	}).view), { ":sparkle(Working) Lead 0s" })
 end)
 
 t.test("the strip's tooltip lists every count and what a click does", function()
@@ -88,20 +88,23 @@ end)
 
 t.test("a click on the strip or on N done shows the closed lines, and a click on open lines hides them", function()
 	local closed = view("working", { sub("A", "running"), sub("B", "done") })
-	t.eq(visible.agentRows(closed), { ":bot(Working) Lead [▮] 0s" })
+	t.eq(visible.agentRows(closed), { ":sparkle(Working) Lead [▮] 0s" })
 	t.eq(visible.button(closed, "Lead"), "subs=7 open")
 	local open = view("working", { sub("A", "running"), sub("B", "done") }, { open = OPEN })
-	t.eq(visible.agentRows(open), { ":bot(Working) Lead [▮] 0s", "■(Running) A", "■(Done) B" })
+	t.eq(visible.agentRows(open), { ":sparkle(Working) Lead [▮] 0s", "■(Running) A", "■(Done) B" })
 	t.eq(visible.button(open, "Lead"), "subs=7 closed")
 	t.eq(visible.button(view("idle", { sub("B", "done") }), "Lead"), "subs=7 open")
 end)
 
 t.test("this tab's agent shows its subagent lines open until the user closes them", function()
 	local subs = { sub("A", "running") }
-	t.eq(visible.agentRows(view("working", subs, { focused = 7 })), { ":bot(Working) Lead [▮] 0s", "■(Running) A" })
+	t.eq(visible.agentRows(view("working", subs, { focused = 7 })), { ":sparkle(Working) Lead [▮] 0s", "■(Running) A" })
 	t.eq(visible.button(view("working", subs, { focused = 7 }), "Lead"), "subs=7 closed")
-	t.eq(visible.agentRows(view("working", subs, { focused = 7, open = { [7] = false } })), { ":bot(Working) Lead [▮] 0s" })
+	t.eq(visible.agentRows(view("working", subs, { focused = 7, open = { [7] = false } })), { ":sparkle(Working) Lead [▮] 0s" })
 end)
+
+-- The zone head and the project label above Lead's row, as `visible.tree` shows them.
+local HEAD = { "■ Working 1 busy", "repo [:plus](New tab in this folder)" }
 
 t.test("a failed subagent shows as its own line while the lines are closed, one step under its agent", function()
 	local subs = {
@@ -109,9 +112,11 @@ t.test("a failed subagent shows as its own line while the lines are closed, one 
 		sub("A>B", "failed", 2, { parent = "A" }),
 		sub("C", "done"),
 	}
-	t.eq(visible.tree(view("working", subs)), { ":bot(Working) Lead [▮] 0s", "  ■(Failed) B failed" })
+	t.eq(visible.tree(view("working", subs)), { HEAD[1], HEAD[2], ":sparkle(Working) Lead [▮] 0s", "  ■(Failed) B failed" })
 	t.eq(visible.tree(view("working", subs, { open = OPEN })), {
-		":bot(Working) Lead [▮] 0s",
+		HEAD[1],
+		HEAD[2],
+		":sparkle(Working) Lead [▮] 0s",
 		"  ■(Running) A",
 		"    ■(Failed) B failed",
 		"  ■(Done) C",
@@ -126,7 +131,7 @@ t.test("a subagent line shows its mark, its name, what it does now with a long p
 		sub("Copy", "done", 1, { since = -3 * 3600000 }),
 	}, { open = OPEN })
 	t.eq(visible.agentRows(out), {
-		":bot(Working) Lead [▮ ▮ ▮] 0s",
+		":sparkle(Working) Lead [▮ ▮ ▮] 0s",
 		"■(Running) Ticket07 read …/view_model.luau 12s",
 		"■(Running) Edit edit lib/x.luau 4m",
 		"■(Running) Probe scout",
@@ -146,7 +151,7 @@ t.test("each subagent line's square carries its state", function()
 		sub("F", "aborted"),
 	}, { open = OPEN })), {
 		"working: ■ Working 1 busy",
-		"working: :bot(Working) Lead [▮] 0s",
+		"working: :sparkle(Working) Lead [▮] 0s",
 		"running: ■(Running) A",
 		"waiting: ■(Waiting on its subagents) B",
 		"idle: ■(Queued) C",
@@ -162,11 +167,11 @@ t.test("open lines indent one step per level down to omp's limit; a deeper level
 		table.insert(subs, sub("L" .. depth, "running", depth, { parent = if depth > 1 then "L" .. (depth - 1) else nil }))
 	end
 	local tree = visible.tree(view("working", subs, { open = OPEN }))
-	t.eq(#tree, 1 + 9 + 1)
-	t.eq(tree[2], "  ■(Running) L1")
-	t.eq(tree[3], "    ■(Running) L2")
-	t.eq(tree[10], string.rep("  ", 9) .. "■(Running) L9")
-	t.eq(tree[11], "  :more +2 deeper")
+	t.eq(#tree, #HEAD + 1 + 9 + 1)
+	t.eq(tree[4], "  ■(Running) L1")
+	t.eq(tree[5], "    ■(Running) L2")
+	t.eq(tree[12], string.rep("  ", 9) .. "■(Running) L9")
+	t.eq(tree[13], "  :more +2 deeper")
 end)
 
 t.test("a click on a subagent line asks to show that subagent in omp's view, at every level", function()
@@ -214,14 +219,14 @@ end)
 
 t.test("open lines from a read that Tern cut say that the subagents may be incomplete", function()
 	t.eq(visible.agentRows(view("working", { sub("B", "running") }, { open = OPEN, incomplete = true })), {
-		":bot(Working) Lead [▮] 0s",
+		":sparkle(Working) Lead [▮] 0s",
 		"■(Running) B",
 		":warn subagents may be incomplete",
 	})
 end)
 
 t.test("an idle agent whose background subagents still run shows its bars", function()
-	t.eq(visible.agentRows(view("idle", { sub("A", "done"), sub("B", "running") })), { ":bot(Idle) Lead [▮]" })
+	t.eq(visible.agentRows(view("idle", { sub("A", "done"), sub("B", "running") })), { ":sparkle(Idle) Lead [▮]" })
 end)
 
 t.test("a working agent in a project shows its open subagent lines inside that project, under its row", function()
@@ -239,14 +244,14 @@ t.test("a working agent in a project shows its open subagent lines inside that p
 	t.eq(visible.rows(out), {
 		"■ Working 1 busy",
 		"alpha [:plus](New tab in this repo)",
-		":bot(Working) Lead [▮] 0s",
+		":sparkle(Working) Lead [▮] 0s",
 		"■(Running) Ticket07",
 		"■(Done) A",
 		"■ Idle 2",
 		"beta [:plus](New tab in this repo)",
-		":bot(Idle) Docs",
+		":sparkle(Idle) Docs",
 		"tmp [:plus](New tab in this folder)",
-		":bot(Idle) Notes",
+		":sparkle(Idle) Notes",
 	})
 	t.eq(visible.click(out, "Ticket07"), "subagent=7 Ticket07")
 end)

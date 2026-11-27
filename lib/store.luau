@@ -1,9 +1,9 @@
 --!strict
 -- The plugin's shared state in `tern.kv`: the pins, the view the strip shows (Live or Recent), whether "Older than a
--- day" is open, the folders open in the Recent view, whether the Recent view shows every folder, when each agent was
--- last in a turn and when each working agent began its turn. `tern.kv` is one file for every window and survives
--- restarts and plugin reloads, so every tab and window shows the same view, pins, rows and timers, and they stay
--- after a reload or a Tern restart.
+-- day" is open, which agents' subagent lines the user opened or closed, the folders open in the Recent view, whether
+-- the Recent view shows every folder, when each agent was last in a turn and when each working agent began its turn.
+-- `tern.kv` is one file for every window and survives restarts and plugin reloads, so every tab and window shows the
+-- same view, pins, rows and timers, and they stay after a reload or a Tern restart.
 
 local sessionReader = require("./session_reader")
 local turns = require("./turns")
@@ -19,6 +19,9 @@ local TURNS = "turns"
 export type KeySet = "recent"
 -- `true` while the Idle zone shows its agents that idled for a day or more.
 local OLDER_OPEN = "older-open"
+-- Whether the user opened (`true`) or closed (`false`) each agent's subagent lines, by pane key. An agent with no
+-- entry follows the default: open while it is this tab's agent.
+local SUBS_OPEN = "subs-open"
 -- Keys that earlier versions kept and no version reads: the folded sections and the open "Older" rows of each
 -- folder (the Live view had folders then).
 local OLD_KEYS = { "folded", "older" }
@@ -121,6 +124,24 @@ local function recentAll(): boolean
 	return get(RECENT_ALL) == true
 end
 
+local function subsOpen(): { [string]: boolean }
+	local out: { [string]: boolean } = {}
+	local stored = get(SUBS_OPEN)
+	if type(stored) ~= "table" then
+		return out
+	end
+	for key, open in stored do
+		if type(key) == "string" and type(open) == "boolean" then
+			out[key] = open
+		end
+	end
+	return out
+end
+
+local function setSubsOpen(choices: { [string]: boolean })
+	tern.kv.set(SUBS_OPEN, if next(choices) == nil then nil else choices)
+end
+
 local function setTurns(starts: turns.Starts)
 	if next(starts) == nil then
 		tern.kv.set(TURNS, nil)
@@ -146,10 +167,11 @@ end
 
 --- Completes the view-model input with the shared state: the wall-clock time, when each working agent began its
 --- turn, when each agent was last in a turn, the pins, the view the strip shows, whether "Older than a day" is open,
---- the folders open in the Recent view and whether it shows every folder. Records the agents it sees for the first
---- time as active now (an agent never seen in a turn counts as new), a working agent with no turn start as working
---- since now, and stores the pins with the pane ids and titles their agents have now. Drops the turn starts of agents
---- that do not work or are gone, and the keys no version reads.
+--- which agents' subagent lines the user opened or closed, the folders open in the Recent view and whether it shows
+--- every folder. Records the agents it sees for the first time as active now (an agent never seen in a turn counts as
+--- new), a working agent with no turn start as working since now, and stores the pins with the pane ids and titles
+--- their agents have now. Drops the turn starts of agents that do not work or are gone, the subagent-line choices of
+--- panes that run no agent, and the keys no version reads.
 function store.fill(input: viewModel.Input): viewModel.Input
 	cleanOldKeys()
 	local time = os.time()
@@ -203,6 +225,23 @@ function store.fill(input: viewModel.Input): viewModel.Input
 	end
 	input.pins = resolved
 	input.olderOpen = get(OLDER_OPEN) == true
+	-- An empty agent list can be a daemon restart: the choices stay then.
+	local choices = subsOpen()
+	local open: { [number]: boolean } = {}
+	local dropped = false
+	for key, choice in choices do
+		local pane = tonumber(key)
+		if pane == nil or (#input.agents > 0 and not listed[key]) then
+			choices[key] = nil
+			dropped = true
+		else
+			open[pane] = choice
+		end
+	end
+	if dropped then
+		setSubsOpen(choices)
+	end
+	input.subsOpen = open
 	input.recentOpen = keySet("recent")
 	input.recentAll = recentAll()
 	input.view = if get(VIEW) == "recent" then "recent" else "live"
@@ -292,6 +331,14 @@ end
 --- Opens "Older than a day" when it is closed, and closes it when it is open.
 function store.toggleOlder()
 	tern.kv.set(OLDER_OPEN, if get(OLDER_OPEN) == true then nil else true)
+end
+
+--- Opens (`open`) or closes the subagent lines of the agent in `pane`, in every copy of the sidebar and after a
+--- reload.
+function store.setSubsOpen(pane: number, open: boolean)
+	local choices = subsOpen()
+	choices[paneKey(pane)] = open
+	setSubsOpen(choices)
 end
 
 --- Adds `key` to the set `name` (a Recent folder opens) when it is not in it, and removes it when it is.

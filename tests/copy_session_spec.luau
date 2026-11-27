@@ -69,6 +69,7 @@ end)
 local function withSubagents(sessionFile: string?): any
 	return view({
 		agents = { agent({ pane = 7, title = "Lead", state = "working", workingSince = 0, sessionFile = sessionFile }) },
+		subsOpen = { [7] = true },
 		subagents = {
 			[7] = {
 				agents = {

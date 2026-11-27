@@ -271,11 +271,14 @@ tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	return true
 end)
 
--- "Older than a day" sends `older`, a Recent folder row `recent=<group key>`, the Recent view's last row
--- `recent-more`.
+-- "Older than a day" sends `older`, an agent's subagent strip `subs=<pane> open` or `subs=<pane> closed`, a Recent
+-- folder row `recent=<group key>`, the Recent view's last row `recent-more`.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
+	local subsPane, subsOpen = string.match(if type(ev.value) == "string" then ev.value else "", "^(%d+) (%a+)$")
 	if ev.act == "older" then
 		store.toggleOlder()
+	elseif ev.act == "subs" and subsPane and (subsOpen == "open" or subsOpen == "closed") then
+		store.setSubsOpen(tonumber(subsPane) :: number, subsOpen == "open")
 	elseif ev.act == "recent" and type(ev.value) == "string" and ev.value ~= "" then
 		store.toggle("recent", ev.value)
 	elseif ev.act == "recent-more" then

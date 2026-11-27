@@ -383,9 +383,9 @@ function visible.click(view: Node, text: string): string?
 end
 
 -- The state that `role` carries (`agents.glyph.<state>` for a title icon, `agents.square.<state>` for a zone head's
--- or a subagent line's square, `agents.dot.<state>` for a state dot, `agents.mark.<state>` for a state icon,
--- `agents.bar.<state>` for a bar of the subagent strip), or nil.
-local STATE_PARTS = { glyph = true, square = true, dot = true, mark = true, bar = true }
+-- or a subagent line's square, `agents.dot.<state>` for a closed session's dot, `agents.bar.<state>` for a bar of the
+-- subagent strip), or nil.
+local STATE_PARTS = { glyph = true, square = true, dot = true, bar = true }
 
 local function stateOf(role: any): string?
 	if type(role) ~= "string" then
