@@ -1,5 +1,6 @@
-/* The Agents sidebar: the Live/Recent switch on top, then the Live view's zones (Needs you, Working, Idle), each a
-   head and its project groups, each a muted label and one 28px line per agent.
+/* The Agents sidebar: the Live/Recent switch on top, with the quota line under it while a subscription quota is near
+   or at its limit, then the Live view's zones (Needs you, Working, Idle), each a head and its project groups, each a
+   muted label and one 28px line per agent.
    Only Tern's variables carry colors, radii and faces, so themes, light and dark, square and round, follow Tern.
    Two text sizes (13px for names, 12px for labels, meta and numbers), two weights (400, 500), numbers in the mono
    face with tabular figures, every space on a 4px grid. Hover marks are inset 1px lines, not fills, so that themes
@@ -37,6 +38,17 @@
 	height: 40px;
 	gap: 16px;
 	padding: 0 8px;
+}
+
+/* The quota line under the switch: a warning or error square, the worst quota, "+N" for the others. */
+[data-role='agents.root'] [data-role='agents.quota'] {
+	height: 24px;
+	gap: 8px;
+	margin-bottom: 4px;
+	padding: 0 8px;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	color: var(--t2);
 }
 
 [data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) {
@@ -333,6 +345,10 @@
 
 [data-role='agents.square.waiting'] {
 	background: var(--warn);
+}
+
+[data-role='agents.square.failed'] {
+	background: var(--bad);
 }
 
 [data-role='agents.square.idle'] {

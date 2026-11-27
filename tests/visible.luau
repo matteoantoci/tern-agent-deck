@@ -244,10 +244,13 @@ function visible.chrome(view: Node): { string }
 	return out
 end
 
+-- The first row that shows `text`: a list row, else a row of the head (the Live/Recent switch and the quota line).
 local function findRow(view: Node, text: string): Node
-	for _, row in rowNodes(view) do
-		if string.find(line(row), text, 1, true) then
-			return row
+	for _, inChrome in { false, true } do
+		for _, row in rowNodes(view, inChrome) do
+			if string.find(line(row), text, 1, true) then
+				return row
+			end
 		end
 	end
 	error("no row shows " .. string.format("%q", text), 3)

@@ -8,6 +8,7 @@ local effortReader = require("./effort_reader")
 local newTab = require("./new_tab")
 local patch = require("./patch")
 local placement = require("./placement")
+local quotaReader = require("./quota_reader")
 local rename = require("./rename")
 local repoRoot = require("./repo_root")
 local sessionCopy = require("./session_copy")
@@ -183,6 +184,7 @@ local function snapshot(cx: WindowCx): viewModel.Input
 		viewing = subagentReader.viewing(),
 		sessions = sessionReader.sessions(),
 		routes = sessionReader.models(),
+		quotas = quotaReader.quotas(),
 		focused = focusedPane(cx),
 		plugin = tern.plugin.id,
 	})
@@ -655,13 +657,16 @@ function sidebar.resume(cx: WindowCx, file: string)
 	end
 end
 
---- Reads the omp sessions again (at most once a minute unless `force`) and the session file each pane's omp
---- reported, and redraws when they changed.
+--- Reads the omp sessions again (at most once a minute unless `force`), the session file each pane's omp reported
+--- and the current subscription quotas, and redraws when they changed.
 function sidebar.scanSessions(force: boolean)
 	if hidden() then
 		return
 	end
 	sessionReader.scan(home(), force, { exists = exists, repoOf = repos.of }, function(later: WindowCx)
+		sidebar.refresh(later)
+	end)
+	quotaReader.read(home(), function(later: WindowCx)
 		sidebar.refresh(later)
 	end)
 	sidebar.readReported()
