@@ -57,7 +57,6 @@ t.test("a closed session's right-click menu copies its session ID and path", fun
 		sessions = { { file = closed, id = "01a1b0", cwd = REPO, repo = REPO, title = "Old chat", at = 100 } },
 		time = 200,
 		view = "recent",
-		recentOpen = { ["repo-_2FUsers_2Fme_2FPersonal_2Ftern-agents"] = true },
 	})
 	t.eq(visible.menu(v, "Old chat"), {
 		"Copy session ID → copy-id=" .. closed,

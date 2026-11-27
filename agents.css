@@ -117,7 +117,6 @@
 		[data-role^='agents.on.'],
 		[data-role^='agents.head.'],
 		[data-role^='agents.label.'],
-		[data-role^='agents.folder.'],
 		[data-role^='agents.fold.'],
 		[data-role^='agents.info.']
 	) {
@@ -174,7 +173,7 @@
 	margin-top: 12px;
 }
 
-/* A row below an agent (a subagent line, a deeper or incomplete line) or below a Recent folder (a session): 24px,
+/* A row below an agent (a subagent line, a deeper or incomplete line): 24px,
    12px text. Depth 1 starts under the agent's title; each level down is 16px further in. */
 [data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']):not([data-role$='.0']) {
 	height: 24px;
@@ -220,7 +219,6 @@
 	:is(
 		[data-role^='agents.item.'],
 		[data-role^='agents.on.'],
-		[data-role^='agents.folder.'],
 		[data-role^='agents.fold.']
 	):hover {
 	box-shadow: inset 0 0 0 1px var(--l2);
@@ -313,7 +311,7 @@
 	height: 16px;
 }
 
-/* The chevron of Older than a day and of a Recent folder row. */
+/* The chevron of Older than a day and of Earlier. */
 [data-role='agents.chev'] {
 	flex: none;
 	display: grid;
@@ -326,17 +324,6 @@
 [data-role='agents.chev'] svg {
 	width: 12px;
 	height: 12px;
-}
-
-/* A closed session's dot: a `○` glyph in an 8px box. */
-[data-role^='agents.dot.'] {
-	flex: none;
-	display: grid;
-	place-items: center;
-	width: 8px;
-	height: 16px;
-	font-size: 8px;
-	line-height: 1;
 }
 
 /* A zone head's or a subagent line's square: the text node's glyph is hidden, and the box is the square. */
@@ -366,7 +353,7 @@
 	color: var(--t3);
 }
 
-:is([data-role='agents.glyph.stopped'], [data-role='agents.dot.exited']) {
+[data-role='agents.glyph.stopped'] {
 	color: var(--t4);
 }
 
@@ -497,8 +484,8 @@
 	color: var(--t3);
 }
 
-/* The controls that show while the pointer is on their row: the `+` of a project label or Recent folder, the count of
-   a Recent folder, and a stopped agent's resume icon, which takes the place of its time. */
+/* The controls that show while the pointer is on their row: the `+` of a project label, and a stopped agent's or a
+   closed session's resume icon, which takes the place of its time. */
 [data-role='agents.root'] button[data-role='agents.hover'],
 [data-role='agents.root'] [data-role='agents.hover'] {
 	flex: none;
@@ -519,7 +506,7 @@
 	color: var(--t1);
 }
 
-:is([data-role='agents.count'], [data-role='agents.hover']) {
+[data-role='agents.hover'] {
 	opacity: 0;
 	transition:
 		opacity 0.15s var(--ease),
@@ -527,8 +514,7 @@
 		box-shadow 0.15s var(--ease);
 }
 
-:is([data-role^='agents.label.'], [data-role^='agents.folder.']):is(:hover, :focus-within)
-	:is([data-role='agents.count'], [data-role='agents.hover']),
+[data-role^='agents.label.']:is(:hover, :focus-within) [data-role='agents.hover'],
 [data-role='agents.hover']:focus-visible {
 	opacity: 1;
 }
@@ -547,14 +533,10 @@
 	display: grid;
 }
 
-/* Older than a day and a Recent folder row: quiet 12px lines. */
-[data-role='agents.root'] :is([data-role^='agents.fold.'], [data-role^='agents.folder.']) {
+/* Older than a day and Earlier: quiet 12px lines. */
+[data-role='agents.root'] [data-role^='agents.fold.'] {
 	font-size: 12px;
 	color: var(--t3);
-}
-
-[data-role='agents.root'] [data-role^='agents.folder.'] [data-role='agents.name'] {
-	flex: 1 1 auto;
 }
 
 /* No motion under the system's reduced motion, Tern's own Reduce motion setting (`.sf-still`) or while the pane is

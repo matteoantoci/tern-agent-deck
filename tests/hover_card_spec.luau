@@ -179,14 +179,9 @@ t.test("a subagent line's card: its state and time, its name, what it does, its 
 end)
 
 t.test("a closed session's card: how long ago it closed, its title, its folder and a hint", function()
-	local folder = "/Users/me/repo"
-	local key = "repo-" .. (string.gsub(folder, "[^%w%-]", function(c: string): string
-		return string.format("_%02X", string.byte(c))
-	end))
 	local out = build({
 		view = "recent",
-		sessions = { { file = FILE, id = "s1", cwd = folder, repo = folder, title = ICON .. " Old chat", at = NOW - 5 * HOUR } },
-		recentOpen = { [key] = true },
+		sessions = { { file = FILE, id = "s1", cwd = "/Users/me/repo", repo = "/Users/me/repo", title = ICON .. " Old chat", at = NOW - 5 * HOUR } },
 	})
 	t.eq(
 		visible.hover(out, "Old chat"),

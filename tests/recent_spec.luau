@@ -1,178 +1,215 @@
 --!strict
--- The Recent view lists, under each folder that has a live agent, its newest closed omp sessions.
+-- The Recent view lists the closed omp sessions by day (Today, Yesterday, This week, then Earlier folded with its
+-- count), and inside each day by project, with the same project labels as Live. Each session is one line: its title
+-- icon, its title, its age and, on hover, the resume icon.
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
 
 local HOME = "/Users/me"
-local REPO = "/Users/me/Personal/tern-agents"
-local KEY = "repo-_2FUsers_2Fme_2FPersonal_2Ftern-agents"
-local SESSIONS = "/Users/me/.omp/agent/sessions/-Personal-tern-agents/"
-local ICON = "\u{F0403} "
-local NOW = 1_800_000_000
+local DECK = "/Users/me/Personal/tern-agent-deck"
+local PI = "/Users/me/Personal/oh-my-pi"
+local SESSIONS = "/Users/me/.omp/agent/sessions/-Personal-tern-agent-deck/"
+local ICON = "\u{F0403}"
+-- Local noon, so that 12 hours back is the start of today and 36 hours back the start of yesterday.
+local NOW = os.time({ year = 2026, month = 11, day = 25, hour = 12, min = 0, sec = 0 })
 local MIN, HOUR, DAY = 60, 60 * 60, 24 * 60 * 60
 
--- The folder row of the repo in the Recent view, open or closed, with the count of the sessions it lists.
-local function HEAD(count: number, open: boolean?): string
-	if open == false then
-		return string.format(":chev-r :mi-folder tern-agents %d [:plus](New tab in this repo)", count)
-	end
-	return string.format(":chev :mi-folder-open tern-agents %d [:plus](New tab in this repo)", count)
-end
+local DECK_LABEL = "tern-agent-deck [:plus](New tab in this repo)"
+local PI_LABEL = "oh-my-pi [:plus](New tab in this repo)"
 
 local function agent(fields: { [string]: any }): { [string]: any }
-	local a: { [string]: any } = { pane = 1, state = "idle", cwd = REPO, repo = REPO, title = ICON .. "Live chat" }
+	local a: { [string]: any } = { pane = 1, state = "idle", cwd = DECK, repo = DECK, title = ICON .. " Live chat" }
 	for k, v in fields do
 		a[k] = v
 	end
 	return a
 end
 
--- A closed omp session of the repo, `ago` seconds since its last write.
+local function file(n: number): string
+	return SESSIONS .. string.format("2026-11-0%dT08-00-00-000Z_%d.jsonl", n, n)
+end
+
+-- A closed omp session of `DECK`, `ago` seconds since its last write.
 local function session(n: number, title: string?, ago: number, fields: { [string]: any }?): { [string]: any }
-	local s: { [string]: any } = {
-		file = SESSIONS .. string.format("2026-11-0%dT08-00-00-000Z_%d.jsonl", n, n),
-		id = "s" .. n,
-		cwd = REPO,
-		repo = REPO,
-		title = title,
-		at = NOW - ago,
-	}
+	local s: { [string]: any } = { file = file(n), id = "s" .. n, cwd = DECK, repo = DECK, title = title, at = NOW - ago }
 	for k, v in (fields or {}) :: { [string]: any } do
 		s[k] = v
+	end
+	if s.repo == false then
+		s.repo = nil
 	end
 	return s
 end
 
--- The Recent view, with the repo's folder open unless `extra` says otherwise.
+-- A closed session's line: its title icon, its title, its age and the resume icon.
+local function line(title: string, age: string, glyph: boolean?): string
+	return (if glyph == false then ":sparkle" else ICON) .. "(Closed) " .. title .. " " .. age .. " :play"
+end
+
 local function view(agents: { any }, sessions: { any }, extra: { [string]: any }?): any
-	local input: { [string]: any } = {
-		agents = agents,
-		sessions = sessions,
-		now = 0,
-		time = NOW,
-		home = HOME,
-		view = "recent",
-		recentOpen = { [KEY] = true },
-	}
+	local input: { [string]: any } = { agents = agents, sessions = sessions, now = 0, time = NOW, home = HOME, view = "recent" }
 	for k, v in (extra or {}) :: { [string]: any } do
 		input[k] = v
 	end
 	return viewModel.build(input :: any).view
 end
 
--- The live agent's own session, which never shows in Recent.
-local function live(): { [string]: any }
-	return session(9, ICON .. "Live chat", 0)
-end
-
-local EMPTY = "No recent sessions\nClosed omp sessions of the last 7 days show here"
-
-t.test("a closed folder with closed sessions shows only its row, with their count", function()
-	t.eq(visible.rows(view({ agent({}) }, { live(), session(1, ICON .. "Plan", 2 * HOUR), session(2, nil, 5 * MIN) }, {
-		recentOpen = {},
-	})), { HEAD(2, false) })
+t.test("closed sessions group by day: Today, Yesterday, This week, then Earlier folded with its count", function()
+	local shown = view({}, {
+		session(1, ICON .. " Plan", 2 * HOUR),
+		session(2, ICON .. " Fix login", 20 * HOUR),
+		session(3, ICON .. " Old", 3 * DAY),
+		session(4, ICON .. " Older", 8 * DAY),
+		session(5, ICON .. " Oldest", 40 * DAY),
+	})
+	t.eq(visible.zones(shown), { "Today 1", "Yesterday 1", "This week 1", ":chev-r Earlier 2" })
+	t.eq(visible.zone(shown, "Today"), { DECK_LABEL, line("Plan", "2h") })
+	t.eq(visible.zone(shown, "Yesterday"), { DECK_LABEL, line("Fix login", "20h") })
+	t.eq(visible.zone(shown, "This week"), { DECK_LABEL, line("Old", "3d") })
+	t.eq(visible.zone(shown, "Earlier"), {})
+	t.eq(visible.click(shown, "Earlier"), "earlier")
 end)
 
-t.test("a live folder without closed sessions does not show", function()
-	t.eq(visible.lines(view({ agent({}) }, {})), { EMPTY })
+t.test("the days follow local midnights, not 24-hour spans", function()
+	local shown = view({}, {
+		session(1, "a", 12 * HOUR - MIN),
+		session(2, "b", 12 * HOUR + MIN),
+		session(3, "c", 36 * HOUR + MIN),
+		session(4, "d", 6 * DAY + 12 * HOUR - MIN),
+		session(5, "e", 6 * DAY + 12 * HOUR + MIN),
+	})
+	t.eq(visible.zones(shown), { "Today 1", "Yesterday 1", "This week 2", ":chev-r Earlier 1" })
 end)
 
-t.test("an open folder lists its sessions newest first, with the title, or Untitled, and the age", function()
-	t.eq(visible.rows(view({ agent({}) }, {
-		live(),
-		session(1, ICON .. "Plan the sidebar", 3 * DAY),
-		session(2, nil, 5 * MIN),
-		session(3, ICON .. "Fix login", 2 * HOUR + 10 * MIN),
-		session(4, "", 30),
-	})), {
-		HEAD(4),
-		"○(Closed) Untitled 30s",
-		"○(Closed) Untitled 5m",
-		"○(Closed) " .. ICON .. "Fix login 2h",
-		"○(Closed) " .. ICON .. "Plan the sidebar 3d",
+t.test("an open Earlier lists its sessions by project", function()
+	local shown = view({}, { session(1, "Old", 9 * DAY), session(2, "Older", 10 * DAY, { cwd = PI, repo = PI }) }, {
+		earlierOpen = true,
+	})
+	t.eq(visible.zones(shown), { ":chev Earlier 2" })
+	t.eq(visible.zone(shown, "Earlier"), { DECK_LABEL, line("Old", "9d", false), PI_LABEL, line("Older", "10d", false) })
+end)
+
+t.test("inside a day, the project with the newest session comes first, and its sessions newest first", function()
+	local shown = view({}, {
+		session(1, "deck old", 5 * HOUR),
+		session(2, "pi new", 1 * HOUR, { cwd = PI, repo = PI }),
+		session(3, "deck new", 2 * HOUR),
+		session(4, "loose", 3 * HOUR, { cwd = "", repo = false }),
+	})
+	t.eq(visible.zone(shown, "Today"), {
+		PI_LABEL,
+		line("pi new", "1h", false),
+		DECK_LABEL,
+		line("deck new", "2h", false),
+		line("deck old", "5h", false),
+		"No folder",
+		line("loose", "3h", false),
 	})
 end)
 
-t.test("a folder lists at most the 5 newest sessions", function()
-	local sessions = {}
-	for n = 1, 7 do
-		table.insert(sessions, session(n, "chat " .. n, n * HOUR))
-	end
-	t.eq(visible.rows(view({ agent({}) }, sessions)), {
-		HEAD(5),
-		"○(Closed) chat 1 1h",
-		"○(Closed) chat 2 2h",
-		"○(Closed) chat 3 3h",
-		"○(Closed) chat 4 4h",
-		"○(Closed) chat 5 5h",
+t.test("a session in a subfolder or outside any repo shows under its project's label", function()
+	local shown = view({}, {
+		session(1, "In lib", HOUR, { cwd = DECK .. "/lib" }),
+		session(2, "Plain", 2 * HOUR, { cwd = "/Users/me/notes/", repo = false }),
+	})
+	t.eq(visible.zone(shown, "Today"), {
+		DECK_LABEL,
+		line("In lib", "1h", false),
+		"notes [:plus](New tab in this folder)",
+		line("Plain", "2h", false),
+	})
+	t.eq(visible.hover(shown, "notes"), "~/notes")
+end)
+
+t.test("an untitled session shows as Untitled with Tern's agent icon", function()
+	t.eq(visible.zone(view({}, { session(1, nil, 30), session(2, "", 5 * MIN) }), "Today"), {
+		DECK_LABEL,
+		line("Untitled", "30s", false),
+		line("Untitled", "5m", false),
 	})
 end)
 
-t.test("a click on the folder row asks to open or close it, and a click on a session asks to resume its file", function()
-	local shown = view({ agent({}) }, { session(1, "Plan", HOUR) })
-	t.eq(visible.click(shown, "tern-agents"), "recent=" .. KEY)
-	t.eq(visible.click(shown, "Plan 1h"), "resume=" .. SESSIONS .. "2026-11-01T08-00-00-000Z_1.jsonl")
+t.test("a click on a session resumes its file in a new tab; the resume icon shows on hover", function()
+	local shown = view({}, { session(1, ICON .. " Plan", HOUR) })
+	t.eq(visible.click(shown, "Plan"), "resume=" .. file(1))
+	t.eq(visible.onHover(shown, "Plan"), { ":play" })
+	t.eq(visible.menu(shown, "Plan"), {
+		"Copy session ID → copy-id=" .. file(1),
+		"Copy session path → copy-path=" .. file(1),
+	})
+end)
+
+t.test("with no closed session, Recent shows one calm line", function()
+	t.eq(visible.lines(view({}, {})), { "No closed omp sessions yet" })
 end)
 
 t.test("a session that a live process holds open does not show", function()
-	t.eq(visible.rows(view({ agent({}) }, {
-		session(1, "Plan", HOUR),
-		session(2, "Still open", MIN, { open = true }),
-	})), { HEAD(1), "○(Closed) Plan 1h" })
+	t.eq(visible.zone(view({}, { session(1, "Plan", HOUR), session(2, "Still open", MIN, { open = true }) }), "Today"), {
+		DECK_LABEL,
+		line("Plan", "1h", false),
+	})
 end)
 
 t.test("the session of a live agent, found by its working directory and title, does not show", function()
-	t.eq(visible.rows(view({ agent({ title = ICON .. "Live chat" }) }, {
-		session(1, ICON .. "Live chat", MIN),
-		session(2, ICON .. "Live chat", DAY),
+	local shown = view({ agent({}) }, {
+		session(1, ICON .. " Live chat", MIN),
+		session(2, ICON .. " Live chat", 2 * HOUR),
 		session(3, "Plan", HOUR),
-	})), {
-		HEAD(2),
-		"○(Closed) Plan 1h",
-		"○(Closed) " .. ICON .. "Live chat 1d",
 	})
+	t.eq(visible.zone(shown, "Today"), { DECK_LABEL, line("Plan", "1h", false), line("Live chat", "2h") })
 end)
 
 t.test("a live agent whose session has no title yet hides the newest untitled session of its folder", function()
-	t.eq(visible.rows(view({ agent({ title = "omp" }) }, {
-		session(1, nil, MIN),
-		session(2, nil, DAY),
-	})), { HEAD(1), "○(Closed) Untitled 1d" })
+	t.eq(visible.zone(view({ agent({ title = "omp" }) }, { session(1, nil, MIN), session(2, nil, HOUR) }), "Today"), {
+		DECK_LABEL,
+		line("Untitled", "1h", false),
+	})
 end)
 
 t.test("an exited agent's session shows", function()
-	t.eq(visible.rows(view({ agent({ pane = 1, title = "Other" }), agent({ pane = 2, state = "exited" }) }, {
-		session(1, ICON .. "Live chat", MIN),
-	})), { HEAD(1), "○(Closed) " .. ICON .. "Live chat 1m" })
-end)
-
-t.test("a session started in a subfolder or worktree shows under its main repo", function()
-	t.eq(visible.rows(view({ agent({}) }, {
-		session(1, "In lib", HOUR, { cwd = REPO .. "/lib" }),
-		session(2, "In a worktree", 2 * HOUR, { cwd = "/Users/me/checkouts/t09" }),
-	})), {
-		HEAD(2),
-		"○(Closed) In lib 1h",
-		"○(Closed) In a worktree 2h",
+	local shown = view({ agent({ pane = 1, title = "Other" }), agent({ pane = 2, state = "exited" }) }, {
+		session(1, ICON .. " Live chat", MIN),
 	})
-end)
-
-t.test("a pinned agent's folder lists its closed sessions too", function()
-	t.eq(visible.rows(view({ agent({ title = "keep" }) }, { session(1, "Plan", HOUR) }, {
-		pins = { { pane = 1, cwd = REPO, title = "keep" } },
-	})), { HEAD(1), "○(Closed) Plan 1h" })
+	t.eq(visible.zone(shown, "Today"), { DECK_LABEL, line("Live chat", "1m") })
 end)
 
 t.test("the Live view lists no closed session", function()
-	local agents = { agent({ pane = 1 }), agent({ pane = 2, title = "old", activeAt = NOW - 2 * DAY }) }
-	local sessions = { session(1, "Plan", HOUR) }
-	t.eq(visible.rows(view(agents, sessions, { view = "live" })), {
-		"■ Idle 2",
-		"tern-agents [:plus](New tab in this repo)",
-		"\u{F0403}(Idle) Live chat",
-		":chev-r Older than a day 1",
-	})
+	t.eq(visible.zones(view({ agent({}) }, { session(1, "Plan", HOUR) }, { view = "live" })), { "■ Idle 1" })
+end)
+
+-- A canvas update holds at most 2000 nodes, so a day shows at most its 50 newest sessions and then one muted
+-- "N more" line that takes no click.
+local function count(node: any): number
+	local n = 1
+	for _, child in (node.c or {}) :: { any } do
+		n += count(child)
+	end
+	return n
+end
+
+t.test("an open Earlier with 500 sessions shows its 50 newest, then one line for the rest", function()
+	local many: { any } = {}
+	for n = 1, 500 do
+		table.insert(many, session(n, "Old " .. n, 8 * DAY + n * HOUR, { file = SESSIONS .. n .. ".jsonl" }))
+	end
+	local shown = view({}, many, { earlierOpen = true })
+	t.eq(count(shown) < 1500, true)
+	local lines = visible.zone(shown, "Earlier")
+	t.eq(lines[#lines], ":more 450 more")
+	t.eq(lines[2], line("Old 1", "8d", false))
+	t.eq(lines[51], line("Old 50", "10d", false))
+	t.eq(visible.click(shown, "450 more"), nil)
+end)
+
+t.test("a day with more than 50 sessions is capped the same way", function()
+	local many: { any } = {}
+	for n = 1, 60 do
+		table.insert(many, session(n, "T" .. n, n * MIN, { file = SESSIONS .. n .. ".jsonl" }))
+	end
+	local lines = visible.zone(view({}, many), "Today")
+	t.eq(#lines, 52)
+	t.eq(lines[52], ":more 10 more")
 end)
 
 return nil

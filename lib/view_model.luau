@@ -116,10 +116,8 @@ export type Input = {
 	subsOpen: { [number]: boolean }?,
 	--- The omp sessions the reader found, in any order; nil before the first read.
 	sessions: { Session }?,
-	--- The keys of the folders whose closed sessions show in the Recent view.
-	recentOpen: { [string]: boolean }?,
-	--- Whether the Recent view shows every folder, rather than only the first few.
-	recentAll: boolean?,
+	--- Whether the Recent view shows its sessions from before this week ("Earlier" is open).
+	earlierOpen: boolean?,
 	--- The view the strip shows chosen; Live when nil.
 	view: View?,
 	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent, and its
@@ -339,12 +337,10 @@ local ROLE = {
 	icon = "agents.icon",
 	glyph = "agents.glyph.",
 	square = "agents.square.",
-	dot = "agents.dot.",
 	name = "agents.name",
 	detail = "agents.detail",
 	rule = "agents.rule",
 	time = "agents.time",
-	count = "agents.count",
 	meta = "agents.meta",
 	hover = "agents.hover",
 	--- The strip at the end of an agent's row, open or closed (`agents.strip.open`).
@@ -363,11 +359,10 @@ local ROLE = {
 	needs = "agents.needs",
 }
 
--- A list row's kind: `item` (a clickable row: an agent, a subagent, a session, "N more"), `on` (this tab's agent's
--- row, or the subagent its omp shows), `head` (a zone's head), `label` (a project's label), `folder` (a Recent folder
--- row with its chevron), `fold` (Older than a day: a chevron and a label) and `info` (the done and incomplete lines,
--- which take no click).
-type Kind = "item" | "on" | "head" | "label" | "folder" | "fold" | "info"
+-- A list row's kind: `item` (a clickable row: an agent, a subagent, a session), `on` (this tab's agent's row, or the
+-- subagent its omp shows), `head` (a zone's or a day's head), `label` (a project's label), `fold` (Older than a day
+-- and Earlier: a chevron and a label) and `info` (the done and incomplete lines, which take no click).
+type Kind = "item" | "on" | "head" | "label" | "fold" | "info"
 
 -- `agents.<kind>.<depth>`: depth 0 for the rows of a zone, one more per level below an agent; the CSS indents a row
 -- by its depth.
@@ -394,11 +389,6 @@ end
 -- and smaller than the name; it takes the free room and is cut first when the row is narrow.
 local function detailNode(text: string): Node
 	return { k = "text", p = { text = text, role = ROLE.detail, grow = 1, basis = 0 } }
-end
-
--- A state dot in the icon column: filled, or hollow for a row that is not updated live.
-local function dotNode(state: State, label: string, hollow: boolean?): Node
-	return { k = "text", p = { spans = { { t = if hollow then "○" else "●" } }, aria = label, role = ROLE.dot .. state } }
 end
 
 -- A small square in a state's color, as a zone head and a subagent line show it; `agents.css` draws the square.
@@ -452,20 +442,6 @@ end
 -- A row's time, neutral (`agents.css` sets it in the mono face with tabular figures).
 local function timeNode(seconds: number): Node
 	return { k = "text", p = { text = duration(seconds), wrap = "none", role = ROLE.time } }
-end
-
--- A grid of muted labels and their values, as `tern.ui.kv` builds it (a project label's hover card).
-type Facts = { { k: string, v: string } }
-
-local function factsNode(facts: Facts): Node?
-	if #facts == 0 then
-		return nil
-	end
-	local items: { { k: { { [string]: string } }, v: { { [string]: string } } } } = {}
-	for _, fact in facts do
-		table.insert(items, { k = { { t = fact.k, s = "muted" } }, v = { { t = fact.v } } })
-	end
-	return { k = "kv", p = { items = items } }
 end
 
 -- The parts of a hover card, top to bottom; a part that is nil or empty is left out.
@@ -890,9 +866,6 @@ function viewModel.groups(agents: { Agent }, home: string?): { Group }
 	return groups
 end
 
--- The Files pane's folder glyphs, which a Recent folder row shows: Material Icon Theme's filled folders.
-local FOLDER, FOLDER_OPEN = "mi-folder", "mi-folder-open"
-
 -- An icon in the icon column.
 local function iconNode(icon: string, tone: string?): Node
 	return { k = "icon", p = { name = icon, tone = tone, role = ROLE.icon } }
@@ -931,50 +904,10 @@ local function plusButton(folder: string, repo: boolean): Node
 	}
 end
 
--- The hover card of a row that stands for `folder`: its short path, then `extra`.
-local function folderCard(folder: string, home: string?, extra: { Node }?): Node
-	local lines: { Node } = { { k = "text", p = { spans = { { t = viewModel.shortPath(folder, home), s = "path" } } } } }
-	for _, line in extra or ({} :: { Node }) do
-		table.insert(lines, line)
-	end
-	return { k = "col", p = { gap = "xs" }, c = lines }
-end
-
--- What a folder row shows: its key and the action of a click on it, the folder and its name, whether it is a repo,
--- whether it shows its rows, the count of its rows, its depth, and the lines its hover card adds after the short
--- path.
-type FolderSpec = {
-	key: string,
-	click: string,
-	folder: string,
-	name: string,
-	repo: boolean,
-	open: boolean,
-	count: number,
-	depth: number,
-	home: string?,
-	extra: { Node }?,
-}
-
--- A Recent folder row: the chevron (open while it shows its rows), the folder glyph, the folder's name, and, while
--- the pointer is on it, the count of its rows and the `+` that starts an agent there. Its hover card gives the
--- folder's short path.
-local function folderRow(spec: FolderSpec): Node
-	local children: { Node } = {
-		chevron(spec.open),
-		iconNode(if spec.open then FOLDER_OPEN else FOLDER),
-		nameNode(spec.name),
-		countNode(spec.count, ROLE.count),
-		plusButton(spec.folder, spec.repo),
-	}
-	local p: { [string]: any } = {
-		key = spec.key,
-		gap = "sm",
-		role = rowRole("folder", spec.depth),
-		actions = { click = spec.click },
-		hovercard = folderCard(spec.folder, spec.home, spec.extra),
-	}
-	return { k = "row", p = p, c = children }
+-- The hover card of a row that stands for `folder`: its short path.
+local function folderCard(folder: string, home: string?): Node
+	local path: Node = { k = "text", p = { spans = { { t = viewModel.shortPath(folder, home), s = "path" } } } }
+	return { k = "col", p = { gap = "xs" }, c = { path } }
 end
 
 -- Whether a group's agents work in a git repo (else in a plain folder).
@@ -983,10 +916,10 @@ local function isRepo(group: Group): boolean
 	return first ~= nil and first.repo ~= nil
 end
 
--- A project's label in a zone: its name in muted text, a light rule to the right edge and, while the pointer is on
--- it, the `+` that starts an agent there. Its hover card gives the folder's short path. Agents with no folder get
--- the label "No folder", with neither.
-local function projectLabel(group: Group, home: string?): Node
+-- A project's label in a zone or a Recent day: its name in muted text, a light rule to the right edge and, while the
+-- pointer is on it, the `+` that starts an agent there (in a repo when `repo`). Its hover card gives the folder's
+-- short path. Agents with no folder get the label "No folder", with neither.
+local function projectLabel(group: Group, home: string?, repo: boolean): Node
 	local children: { Node } = {
 		{ k = "text", p = { text = group.name, role = ROLE.name } },
 		{ k = "rule", p = { role = ROLE.rule, grow = 1 } },
@@ -994,7 +927,7 @@ local function projectLabel(group: Group, home: string?): Node
 	local p: { [string]: any } = { key = "head", gap = "sm", role = rowRole("label", 0) }
 	local folder = group.folder
 	if folder then
-		table.insert(children, plusButton(folder, isRepo(group)))
+		table.insert(children, plusButton(folder, repo))
 		p.hovercard = folderCard(folder, home)
 	end
 	return { k = "row", p = p, c = children }
@@ -1469,31 +1402,30 @@ function viewModel.redrawDue(input: Input): number?
 	return due
 end
 
--- A folder lists at most this many closed sessions.
-local RECENT_SESSIONS = 5
-
--- A closed session at `depth`: a hollow dot, its title with omp's icon (or "Untitled") and, at the right end, how
--- long ago it was last written. A click resumes it in a new tab; a right-click copies its ID or path. Its hover card
--- says how long ago it closed, its title, its folder and what a click and a right-click do.
-local function sessionRow(session: Session, time: number?, depth: number, home: string?): Node
+-- A closed session: its title icon, its title (or "Untitled"), how long ago it was last written and, while the
+-- pointer is on it, the resume icon. A click resumes it in a new tab; a right-click copies its ID or path. Its hover
+-- card says how long ago it closed, its title, its folder and what a click and a right-click do.
+local function sessionRow(session: Session, time: number?, home: string?): Node
 	local seconds = if time then time - session.at else nil
-	local children: { Node } = { dotNode("exited", "Closed", true), nameNode(shownTitle(session.title) or "Untitled") }
+	local title = plainTitle(session.title) or "Untitled"
+	local children: { Node } = { titleIcon(session.title, "stopped", "Closed"), nameNode(title) }
 	if seconds then
 		table.insert(children, timeNode(seconds))
 	end
+	table.insert(children, { k = "icon", p = { name = "play", role = ROLE.hover } })
 	local items = copyItems(session.file, NO_SESSION_FILE)
 	return {
 		k = "row",
 		p = {
 			key = "session-" .. keyPart(session.id or session.file),
 			gap = "sm",
-			role = rowRole("item", depth),
+			role = rowRole("item", 0),
 			actions = { click = "resume=" .. session.file, menu = items },
 			hovercard = card({
 				mark = titleIcon(session.title, "stopped"),
 				state = "Closed",
 				seconds = seconds,
-				name = plainTitle(session.title) or "Untitled",
+				name = title,
 				facts = { viewModel.shortPath(session.cwd, home) },
 				hint = hintText("resume in a new tab", items),
 			}),
@@ -1502,85 +1434,75 @@ local function sessionRow(session: Session, time: number?, depth: number, home: 
 	}
 end
 
--- The hover card line of a Recent folder: how long ago its newest session was written.
-local function lastSession(sessions: { Session }, time: number): Node
-	return factsNode({ { k = "Last session", v = duration(time - sessions[1].at) .. " ago" } }) :: Node
+-- The days of the Recent view, newest first: each its name and the earliest time (`os.time()` seconds) a session
+-- in it was written. The last day, "Earlier", takes every older session and shows folded.
+type Day = { name: string, from: number }
+
+-- The local midnight `back` days before the day of `time`.
+local function midnight(time: number, back: number): number
+	local t = os.date("*t", time)
+	return os.time({ year = t.year, month = t.month, day = t.day - back, hour = 0, min = 0, sec = 0 })
 end
 
-local function folderName(folder: string): string
-	return string.match(folder, "([^/]+)/*$") or folder
-end
-
--- A folder of the Recent view at `depth`, with its closed sessions (newest first): its folder row (a click opens
--- or closes it) and, while open, its newest sessions one level under it.
-local function recentFolder(folder: string, repo: boolean, sessions: { Session }, depth: number, input: Input): Node
-	local key = groupKey(folder)
-	local open = (input.recentOpen or {})[key] == true
-	local count = math.min(#sessions, RECENT_SESSIONS)
-	local time = input.time
-	local rows: { Node } = {
-		folderRow({
-			key = "head",
-			click = "recent=" .. key,
-			folder = folder,
-			name = folderName(folder),
-			repo = repo,
-			open = open,
-			count = count,
-			depth = depth,
-			home = input.home,
-			extra = if time then { lastSession(sessions, time) } else nil,
-		}),
-	}
-	if open then
-		for i = 1, count do
-			table.insert(rows, sessionRow(sessions[i], time, depth + 1, input.home))
-		end
+-- Today, Yesterday and This week (the 5 days before them) by local midnights, then Earlier. With no wall-clock time,
+-- every session is Earlier.
+local function recentDays(time: number?): { Day }
+	local days: { Day } = {}
+	if time then
+		table.insert(days, { name = "Today", from = midnight(time, 0) })
+		table.insert(days, { name = "Yesterday", from = midnight(time, 1) })
+		table.insert(days, { name = "This week", from = midnight(time, 6) })
 	end
-	return { k = "col", p = { key = key, gap = "none" }, c = rows }
+	table.insert(days, { name = "Earlier", from = -math.huge })
+	return days
 end
 
--- A folder without a live agent shows in the Recent view while it has a session written in the last this many
--- seconds.
-local RECENT_FOLDER_AGE = 7 * DAY
--- The Recent view shows this many folders until the user opens the rest.
-local RECENT_FOLDERS = 5
-
--- A folder of the Recent view: its folder and its closed sessions, newest first.
-type RecentFolder = { folder: string, repo: boolean, sessions: { Session } }
-
--- The last row of the Recent view while some folders do not show (or, once they all show, the row that hides them
--- again).
-local function moreRow(icon: string, text: string): Node
-	local children: { Node } = { iconNode(icon, "muted"), nameNode(text, "muted") }
-	local p: { [string]: any } = { key = "more", gap = "sm", role = rowRole("item", 0), actions = { click = "recent-more" } }
-	return { k = "row", p = p, c = children }
-end
-
--- The folders of the Recent view, each once, the one with the newest closed session first: a folder with a live
--- agent (pinned ones too) and closed sessions of any age, and a folder with no live agent and a closed session from
--- the last week (with no wall-clock time, only the live ones).
-local function recentFolders(input: Input, closed: { Session }, sessionsOf: { [string]: { Session } }): { RecentFolder }
-	local time = input.time
-	local live: { [string]: boolean } = {}
-	for _, agent in input.agents do
-		local folder = folderOf(agent)
-		if folder and agent.state ~= "exited" then
-			live[folder] = true
-		end
-	end
-	local folders: { RecentFolder } = {}
-	local seen: { [string]: boolean } = {}
-	for _, session in closed do
+-- The closed sessions of one day by project, each project once, the one with the newest session first; sessions
+-- with no folder last, under "No folder". Each project is its label (as in Live) and its sessions, newest first.
+local function recentProjects(sessions: { Session }, input: Input): { Node }
+	local groups: { { group: Group, repo: boolean, sessions: { Session } } } = {}
+	local byFolder: { [string]: number } = {}
+	local loose: { Session } = {}
+	for _, session in sessions do
 		local folder = folderFor(session.repo, session.cwd)
-		if folder and not seen[folder] then
-			seen[folder] = true
-			if live[folder] or (time ~= nil and time - session.at <= RECENT_FOLDER_AGE) then
-				table.insert(folders, { folder = folder, repo = session.repo ~= nil, sessions = sessionsOf[folder] })
+		if not folder then
+			table.insert(loose, session)
+		else
+			local index = byFolder[folder]
+			if not index then
+				table.insert(groups, {
+					group = {
+						folder = folder,
+						label = viewModel.shortPath(folder, input.home),
+						name = string.match(folder, "([^/]+)/*$") or folder,
+						key = groupKey(folder),
+						agents = {},
+					},
+					repo = session.repo ~= nil,
+					sessions = {},
+				})
+				index = #groups
+				byFolder[folder] = index
 			end
+			table.insert(groups[index].sessions, session)
 		end
 	end
-	return folders
+	if #loose > 0 then
+		table.insert(groups, {
+			group = { label = NO_FOLDER, name = NO_FOLDER, key = "no-folder", agents = {} },
+			repo = false,
+			sessions = loose,
+		})
+	end
+	local out: { Node } = {}
+	for _, project in groups do
+		local nodes: { Node } = { projectLabel(project.group, input.home, project.repo) }
+		for _, session in project.sessions do
+			table.insert(nodes, sessionRow(session, input.time, input.home))
+		end
+		table.insert(out, { k = "col", p = { key = project.group.key, role = ROLE.project, gap = "none" }, c = nodes })
+	end
+	return out
 end
 
 local function sameDir(a: string?, b: string?): boolean
@@ -1923,27 +1845,14 @@ local function chrome(view: View, input: Input, needs: number): Node
 	return { k = "col", p = { key = "chrome", role = ROLE.chrome, gap = "none" }, c = children }
 end
 
--- The closed sessions of each folder, newest first, by folder.
-local function sessionsByFolder(closed: { Session }): { [string]: { Session } }
-	local out: { [string]: { Session } } = {}
-	for _, session in closed do
-		local folder = folderFor(session.repo, session.cwd)
-		if folder then
-			local list = out[folder] or {}
-			out[folder] = list
-			table.insert(list, session)
-		end
+-- A zone of the Live view or a day of the Recent view: its head (the square in its state's color, for a zone; its
+-- name and its status), then `body`.
+local function zone(key: string, state: State?, title: string, status: string, body: { Node }): Node
+	local parts: { Node } = { nameNode(title), { k = "text", p = { text = status, wrap = "none", role = ROLE.meta } } }
+	if state then
+		table.insert(parts, 1, squareNode(state))
 	end
-	return out
-end
-
--- A zone of the Live view: its head (the square in its state's color, its name and its status), then `body`.
-local function zone(key: string, state: State, title: string, status: string, body: { Node }): Node
-	local head: Node = {
-		k = "row",
-		p = { key = "head", gap = "sm", role = rowRole("head", 0) },
-		c = { squareNode(state), nameNode(title), { k = "text", p = { text = status, wrap = "none", role = ROLE.meta } } },
-	}
+	local head: Node = { k = "row", p = { key = "head", gap = "sm", role = rowRole("head", 0) }, c = parts }
 	table.insert(body, 1, head)
 	return { k = "col", p = { key = key, role = ROLE.zone, gap = "none" }, c = body }
 end
@@ -1971,7 +1880,7 @@ local function projectGroups(
 		end
 		if #listed > 0 then
 			table.sort(listed, before)
-			local nodes: { Node } = { projectLabel(group, home) }
+			local nodes: { Node } = { projectLabel(group, home, isRepo(group)) }
 			for _, agent in listed do
 				table.insert(nodes, render(agent))
 			end
@@ -2142,33 +2051,61 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 	return children
 end
 
--- The Recent view: its folders at the top level (see `recentFolders`), 5 of them until the "N more" row at the end
--- opens the rest; an empty state when there is no closed session to show.
+-- The Recent view: the closed sessions by day (Today, Yesterday, This week), each day its count and its projects
+-- (see `recentProjects`), then "Earlier" folded with its count; each day hidden while empty. A calm line shows while
+-- there is no closed session. A day shows at most its `RECENT_CAP` newest sessions, then one muted "N more" line
+-- that takes no click: a canvas update holds at most 2000 nodes.
+local RECENT_CAP = 50
+
+local function recentDay(key: string, sessions: { Session }, input: Input): { Node }
+	local shown = sessions
+	if #sessions > RECENT_CAP then
+		shown = table.move(sessions, 1, RECENT_CAP, 1, {})
+	end
+	local body = recentProjects(shown, input)
+	if #sessions > RECENT_CAP then
+		local text = string.format("%d more", #sessions - RECENT_CAP)
+		table.insert(body, infoLine(key .. "-more", iconNode("more", "muted"), text, "muted", 0))
+	end
+	return body
+end
+
 local function recentBody(input: Input): { Node }
 	local closed = closedSessions(input.sessions or {}, input.agents)
-	local folders = recentFolders(input, closed, sessionsByFolder(closed))
-	local children: { Node } = {}
-	local shown = if input.recentAll then #folders else math.min(#folders, RECENT_FOLDERS)
-	for i = 1, shown do
-		local recent = folders[i]
-		table.insert(children, recentFolder(recent.folder, recent.repo, recent.sessions, 0, input))
+	local days = recentDays(input.time)
+	local byDay: { { Session } } = {}
+	for i in days do
+		byDay[i] = {}
 	end
-	if #folders > RECENT_FOLDERS then
-		table.insert(
-			children,
-			if input.recentAll then moreRow("chev", "Show fewer") else moreRow("more", string.format("%d more", #folders - shown))
-		)
+	for _, session in closed do
+		for i, day in days do
+			if session.at >= day.from then
+				table.insert(byDay[i], session)
+				break
+			end
+		end
+	end
+	local children: { Node } = {}
+	for i, day in days do
+		local sessions = byDay[i]
+		if #sessions > 0 then
+			local key = "day-" .. string.lower((string.gsub(day.name, " ", "-")))
+			if day.name ~= "Earlier" then
+				table.insert(children, zone(key, nil, day.name, tostring(#sessions), recentDay(key, sessions, input)))
+			else
+				local open = input.earlierOpen == true
+				local body: { Node } = { foldRow("head", "Earlier", #sessions, open, "earlier", 0) }
+				if open then
+					for _, project in recentDay(key, sessions, input) do
+						table.insert(body, project)
+					end
+				end
+				table.insert(children, { k = "col", p = { key = key, role = ROLE.zone, gap = "none" }, c = body })
+			end
+		end
 	end
 	if #children == 0 then
-		table.insert(children, {
-			k = "empty",
-			p = {
-				key = "empty",
-				icon = "history",
-				title = "No recent sessions",
-				text = "Closed omp sessions of the last 7 days show here",
-			},
-		})
+		table.insert(children, { k = "text", p = { key = "calm", role = ROLE.calm, text = "No closed omp sessions yet" } })
 	end
 	return children
 end
