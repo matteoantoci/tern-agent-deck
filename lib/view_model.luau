@@ -1171,10 +1171,44 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 	}
 end
 
+-- An agent draws at most this many subagent lines: with none running, omp's tray lists every finished subagent of
+-- the session, and a canvas update holds at most 2000 nodes and 256 KiB.
+local SUB_LINES = 20
+
+-- The subagents of `subs` that get a line, at most `SUB_LINES`: first the one the pane shows and the ones not
+-- finished well or stopped (running, waiting, queued, failed), then the newest finished ones. Also how many get none.
+local function drawnSubs(subs: subagents.Subagents, shown: string?): ({ [subagents.Subagent]: boolean }, number)
+	local candidates: { { sub: subagents.Subagent, index: number, urgent: boolean } } = {}
+	for index, sub in subs.agents do
+		if sub.depth <= MAX_DEPTH then
+			local urgent = (sub.status ~= "done" and sub.status ~= "aborted") or viewing.shows(sub, shown)
+			table.insert(candidates, { sub = sub, index = index, urgent = urgent })
+		end
+	end
+	if #candidates > SUB_LINES then
+		table.sort(candidates, function(a, b)
+			if a.urgent ~= b.urgent then
+				return a.urgent
+			end
+			local sa, sb = a.sub.since or -math.huge, b.sub.since or -math.huge
+			if sa ~= sb then
+				return sa > sb
+			end
+			return a.index > b.index
+		end)
+	end
+	local drawn: { [subagents.Subagent]: boolean } = {}
+	for k = 1, math.min(SUB_LINES, #candidates) do
+		drawn[candidates[k].sub] = true
+	end
+	return drawn, math.max(0, #candidates - SUB_LINES)
+end
+
 -- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
 -- down per nesting level: every one while the lines are open (`agents.strip.open`), else only the failed ones (a
--- failure never hides). A warning line says when Tern cut the read, and one that +N running subagents sit past the
--- levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
+-- failure never hides), at most `SUB_LINES` of them (see `drawnSubs`) and then a muted "+N more" line. A warning
+-- line says when Tern cut the read, and one that +N running subagents sit past the levels omp renders. This tab's
+-- agent, and its open lines, are one block, which `agents.css` draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1192,6 +1226,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	-- While the lines are open, the subagent the focused pane's omp shows takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
+	local drawn, past = drawnSubs(subs, if open then shown else nil)
 	for _, sub in subs.agents do
 		local selected = open and viewing.shows(sub, shown)
 		if selected then
@@ -1201,11 +1236,14 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			if sub.status == "running" then
 				deeper += 1
 			end
-		elseif open or sub.status == "failed" then
+		elseif (open or sub.status == "failed") and drawn[sub] then
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 			local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
 			table.insert(if open then lines else failed, line)
 		end
+	end
+	if open and past > 0 then
+		table.insert(lines, infoLine("subs-more", iconNode("more", "muted"), string.format("+%d more", past), "muted", depth + 1))
 	end
 	if open then
 		if deeper > 0 then
