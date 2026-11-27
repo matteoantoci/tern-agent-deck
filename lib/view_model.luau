@@ -347,7 +347,8 @@ local ROLE = {
 	time = "agents.time",
 	meta = "agents.meta",
 	hover = "agents.hover",
-	--- The strip at the end of an agent's row, open or closed (`agents.strip.open`).
+	--- The strip at the end of an agent's row while its lines are folded; `agents.strip.open` while they show (a
+	--- chevron that shows only on row hover).
 	strip = "agents.strip",
 	--- The strip's "N subagents", shown when no subagent runs but some wait or are queued.
 	tally = "agents.tally",
@@ -1171,11 +1172,12 @@ local function crewText(crew: Crew): string
 	return table.concat(parts, " · ")
 end
 
--- The strip at the end of an agent's row, while a subagent runs, waits or is queued: one bar in the working color per
--- running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the ones that
--- wait or are queued. Nil when every subagent finished: then the agent has no subagent lines to show or hide. A click
--- shows or hides the subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and
--- says what a click does.
+-- The strip at the end of an agent's row, while a subagent runs, waits or is queued. Folded: one bar in the working
+-- color per running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the
+-- ones that wait or are queued; a click shows the subagent lines (`subs=<pane> open`). Open: the lines show the
+-- subagents, so the slot holds only a chevron, which `agents.css` shows while the pointer or the focus is on the row;
+-- a click folds the lines (`subs=<pane> closed`). Nil when every subagent finished: then the agent has no subagent
+-- lines to show or hide. The tooltip lists every count and says what a click does.
 local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local running = crew.running
 	local pending = crew.waiting + crew.queued
@@ -1185,7 +1187,9 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
-	if running > 0 then
+	if open then
+		table.insert(children, chevron(true))
+	elseif running > 0 then
 		for _ = 1, math.min(running, STRIP_BARS) do
 			table.insert(children, { k = "text", p = { text = "▮", wrap = "none", role = ROLE.bar .. "running" } })
 		end
@@ -1200,7 +1204,7 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 		p = {
 			key = "strip",
 			gap = "none",
-			role = if running > 0 then (if open then ROLE.strip .. ".open" else ROLE.strip) else ROLE.tally,
+			role = if open then ROLE.strip .. ".open" elseif running > 0 then ROLE.strip else ROLE.tally,
 			title = title,
 			actions = { click = click },
 		},
