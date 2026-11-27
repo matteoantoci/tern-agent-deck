@@ -52,8 +52,8 @@
 }
 
 /* The quota line under the switch: a warning or error square, the worst quota, "+N" for the others. It sits between
-   the switch's hairline and the head's. Its text has no descenders, so the row sits 1px high (3px above, 5px below)
-   to put the same space above the capitals as below the baseline (measured live: 10px each). */
+   the switch's hairline and the head's. The row sits 1px high (3px above, 5px below): an offset measured live, so that
+   the visible gaps above and below the text match (about 10px each). */
 [data-role='agents.root'] [data-role='agents.quota'] {
 	height: 24px;
 	gap: 8px;
