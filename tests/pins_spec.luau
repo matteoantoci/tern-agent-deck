@@ -35,7 +35,7 @@ t.test("a pinned agent shows once, first in its zone and project", function()
 			agent({ pane = 2, title = "build" }),
 		},
 		pins = { { pane = 2, cwd = REPO, title = "build" } },
-	})), { "■ Idle 2", LABEL, ":sparkle(Idle) build", ":sparkle(Idle) plan" })
+	})), { "■ Idle 2 idle", LABEL, ":sparkle(Idle) build", ":sparkle(Idle) plan" })
 end)
 
 t.test("pinned agents keep the order they were pinned in", function()
@@ -97,7 +97,7 @@ t.test("a pinned agent that exited stays in Idle as stopped", function()
 		agents = { agent({ pane = 2, title = "build", state = "exited" }) },
 		pins = { { pane = 2, cwd = REPO, title = "build" } },
 	})
-	t.eq(visible.rows(v), { "■ Idle 1 · 1 stopped", LABEL, ":sparkle(Stopped) build :play" })
+	t.eq(visible.rows(v), { "■ Idle 1 stopped", LABEL, ":sparkle(Stopped) build :play" })
 	t.eq(visible.state(v, ") build"), "stopped")
 end)
 
@@ -155,7 +155,7 @@ t.test("a pin follows its session to the agent that resumed it, and keeps the se
 	}
 	local pins = { { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } }
 	t.eq(viewModel.resolvePins(agents :: any, pins), { { pane = 9, cwd = REPO, title = "build", sessionFile = SESSION } })
-	t.eq(visible.rows(view({ agents = agents, pins = pins })), { "■ Idle 1", LABEL, ":sparkle(Idle) build" })
+	t.eq(visible.rows(view({ agents = agents, pins = pins })), { "■ Idle 1 idle", LABEL, ":sparkle(Idle) build" })
 	t.eq(
 		viewModel.resolvePins({ agent({ pane = 2, title = "build", sessionFile = SESSION }) } :: any, { { pane = 2, cwd = REPO, title = "build" } }),
 		{ { pane = 2, cwd = REPO, title = "build", sessionFile = SESSION } }

@@ -175,7 +175,7 @@ t.test("an exited agent's session shows", function()
 end)
 
 t.test("the Live view lists no closed session", function()
-	t.eq(visible.zones(view({ agent({}) }, { session(1, "Plan", HOUR) }, { view = "live" })), { "■ Idle 1" })
+	t.eq(visible.zones(view({ agent({}) }, { session(1, "Plan", HOUR) }, { view = "live" })), { "■ Idle 1 idle" })
 end)
 
 -- A canvas update holds at most 2000 nodes and 256 KiB, so the whole view shows at most its 50 newest sessions and
