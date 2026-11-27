@@ -1017,8 +1017,9 @@ end
 
 -- One subagent at any nesting level, as a line one step under its agent plus one step per depth: its square in the
 -- state's color, its own name (the last level of its omp id), what it does now (the call, with a long path cut to its
--- file name; a failed one with no call shows "failed"), and its time. The hover card repeats them with the whole call,
--- the role, the parent, the model (as its session file names it, `provider/model`, else omp's model id) and the
+-- file name; a failed one with no call shows "failed"; a done one shows none), and its time. The hover card repeats
+-- them with the whole call, the role, the parent, the model (as its session file names it, `provider/model`, else
+-- omp's model id) and the
 -- effort. A click asks to show the subagent in omp's view (`subagent=<pane> <omp id>`); a right-click copies the ID
 -- or path of its own session file, found from its agent's (`agentFile`).
 local function subLine(
@@ -1036,7 +1037,10 @@ local function subLine(
 	local own = levels[#levels]
 	local shown = subShown(sub, frozen)
 	local intent = nonEmpty(sub.intent)
-	local call = if intent
+	-- A done line shows no call: the hover card keeps it.
+	local call = if sub.status == "done"
+		then nil
+		elseif intent
 		then cutPaths(intent)
 		elseif sub.status == "failed"
 		then "failed"

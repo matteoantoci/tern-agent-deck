@@ -101,7 +101,7 @@ t.test("a sibling that finished while omp showed another subagent shows as done 
 	}
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
 		":sparkle(Working) Lead [▮] 0s",
-		"■(Done) Ticket03 task",
+		"■(Done) Ticket03",
 		"■(Running) Ticket07 task",
 		":sparkle(Working) Other 0s",
 	})
