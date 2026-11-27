@@ -52,11 +52,12 @@
 }
 
 /* The quota line under the switch: a warning or error square, the worst quota, "+N" for the others. It sits between
-   the switch's hairline and the head's, with the same 4px above and below its 24px row (about 10px around the text). */
+   the switch's hairline and the head's. Its text has no descenders, so the row sits 1px high (3px above, 5px below)
+   to put the same space above the capitals as below the baseline (measured live: 10px each). */
 [data-role='agents.root'] [data-role='agents.quota'] {
 	height: 24px;
 	gap: 8px;
-	margin: 4px 0;
+	margin: 3px 0 5px;
 	padding: 0 8px;
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
