@@ -1227,7 +1227,9 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local crew = count(subs)
 	local main = row(agent, shared, pinned, depth, crewText(crew))
 	local chosen = shared.subsOpen[agent.pane]
-	local open = if chosen ~= nil then chosen else shared.focused == agent.pane
+	-- This tab's agent shows its lines open by default only while a subagent runs or waits on the user.
+	local busy = crew.running + crew.waiting > 0
+	local open = if chosen ~= nil then chosen else shared.focused == agent.pane and busy
 	-- The strip goes right after the name, before the time.
 	table.insert(main.c :: { Node }, 3, stripNode(pane, crew, #subs.agents, open))
 	local lines: { Node } = { main }
