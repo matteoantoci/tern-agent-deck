@@ -25,12 +25,17 @@
 	outline-offset: -1px;
 }
 
-/* The head: the Live/Recent switch stays at the top while the list scrolls. */
+/* The head: the Live/Recent switch stays at the top while the list scrolls. It has no fill of its own: in Tern's own
+   themes the pane behind the canvas is translucent, so any fill (even --panel) reads as a box inset from the pane's
+   edges. A strong blur of what is behind it keeps it the pane's own surface at rest, and turns the rows that scroll
+   under it into an even smear, so that their text does not show through. */
 [data-role='agents.chrome'] {
 	position: sticky;
 	top: 0;
 	z-index: 1;
-	background: var(--panel);
+	background: transparent;
+	-webkit-backdrop-filter: blur(24px);
+	backdrop-filter: blur(24px);
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
@@ -383,7 +388,8 @@
 }
 
 /* The subagent strip after an agent's title: one 3×12 bar in the working color per running subagent, then "+N";
-   with none running, a neutral "N done". A click shows or hides the subagent lines. */
+   with none running, a neutral "N subagents" for the ones that wait or are queued. A click shows or hides the
+   subagent lines. */
 [data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']) {
 	flex: none;
 	display: flex;

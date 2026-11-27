@@ -92,7 +92,7 @@ t.test("a not-live subagent's square says so, while the running ones show runnin
 	})
 end)
 
-t.test("a sibling that finished while omp showed another subagent shows as done once the view ends", function()
+t.test("a sibling that finished while omp showed another subagent loses its line once the view ends", function()
 	local whileViewing = after(nil, dock({ "Ticket07" }), 7)
 	t.eq(visible.agentRows(whileViewing)[2], "■(Not live) Ticket03 task")
 	local read: any = {
@@ -101,7 +101,6 @@ t.test("a sibling that finished while omp showed another subagent shows as done 
 	}
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
 		":sparkle(Working) Lead [▮] 0s",
-		"■(Done) Ticket03",
 		"■(Running) Ticket07 task",
 		":sparkle(Working) Other 0s",
 	})

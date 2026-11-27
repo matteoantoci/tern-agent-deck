@@ -132,8 +132,8 @@ export type Input = {
 	--- The model (`provider/model`) of each session file the session reader read (main agents' and subagents'), by
 	--- file; a subagent's hover card names its model from it.
 	routes: { [string]: string }?,
-	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. A quota near or
-	--- at its limit shows as one line under the Live/Recent switch.
+	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. When every account
+	--- of a provider has a quota near or at its limit, one line under the Live/Recent switch says so.
 	quotas: { Quota }?,
 	--- What each live omp session cost, by session file, its subagents included; a session that is absent has no cost
 	--- line in its hover card.
@@ -350,7 +350,7 @@ local ROLE = {
 	hover = "agents.hover",
 	--- The strip at the end of an agent's row, open or closed (`agents.strip.open`).
 	strip = "agents.strip",
-	--- The strip's "N done", shown when no subagent runs.
+	--- The strip's "N subagents", shown when no subagent runs but some wait or are queued.
 	tally = "agents.tally",
 	--- One bar of the strip, per running subagent (`agents.bar.running`).
 	bar = "agents.bar.",
@@ -968,13 +968,12 @@ end
 --- `main`; nil when it cannot be told.
 viewModel.subagentFile = subagentFile
 
--- How a subagent line shows a subagent: the state of its square, and the name of that state for a screen reader.
+-- How a subagent line shows a subagent: the state of its square, and the name of that state for a screen reader. A
+-- finished subagent (done or stopped) gets no line.
 local SUB_STATE: { [string]: { state: State, label: string } } = {
 	running = { state = "running", label = "Running" },
 	pending = { state = "idle", label = "Queued" },
-	done = { state = "done", label = "Done" },
 	failed = { state = "failed", label = "Failed" },
-	aborted = { state = "stopped", label = "Stopped" },
 }
 
 -- Whether a subagent runs or waits in the queue: only those take a bar of the strip.
@@ -1017,7 +1016,7 @@ end
 
 -- One subagent at any nesting level, as a line one step under its agent plus one step per depth: its square in the
 -- state's color, its own name (the last level of its omp id), what it does now (the call, with a long path cut to its
--- file name; a failed one with no call shows "failed"; a done one shows none), and its time. The hover card repeats
+-- file name; a failed one with no call shows "failed"), and its time. The hover card repeats
 -- them with the whole call, the role, the parent, the model (as its session file names it, `provider/model`, else
 -- omp's model id) and the
 -- effort. A click asks to show the subagent in omp's view (`subagent=<pane> <omp id>`); a right-click copies the ID
@@ -1037,14 +1036,7 @@ local function subLine(
 	local own = levels[#levels]
 	local shown = subShown(sub, frozen)
 	local intent = nonEmpty(sub.intent)
-	-- A done line shows no call: the hover card keeps it.
-	local call = if sub.status == "done"
-		then nil
-		elseif intent
-		then cutPaths(intent)
-		elseif sub.status == "failed"
-		then "failed"
-		else nonEmpty(role)
+	local call = if intent then cutPaths(intent) elseif sub.status == "failed" then "failed" else nonEmpty(role)
 	local children: { Node } = { squareNode(shown.state, shown.label), nameNode(own, nil, call ~= nil) }
 	if call then
 		table.insert(children, detailNode(call))
@@ -1095,8 +1087,8 @@ local function infoLine(key: string, icon: Node, text: string, style: string, de
 	return { k = "row", p = { key = key, gap = "sm", role = rowRole("info", depth) }, c = children }
 end
 
--- The counts of a crew, as the strip's tooltip and its "N done" read them: the subagents that run, the ones that wait
--- on the user, the ones queued, and the finished ones by result.
+-- The counts of a crew, as the strip, its tooltip and the hover card read them: the subagents that run, the ones that
+-- wait on the user, the ones queued, and the finished ones by result.
 type Crew = { running: number, waiting: number, queued: number, done: number, failed: number, stopped: number }
 
 local function count(subs: subagents.Subagents): Crew
@@ -1142,13 +1134,17 @@ local function crewText(crew: Crew): string
 	return table.concat(parts, " · ")
 end
 
--- The strip at the end of an agent's row, when the agent has subagents: one bar in the working color per running
--- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place; with none
--- running and none done (all queued, waiting or ended otherwise), a neutral "N subagents". A click shows or hides the
--- subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and says what a click
--- does, so that a failure is one hover away also while the lines are closed.
-local function stripNode(pane: string, crew: Crew, total: number, open: boolean): Node
+-- The strip at the end of an agent's row, while a subagent runs, waits or is queued: one bar in the working color per
+-- running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the ones that
+-- wait or are queued. Nil when every subagent finished: then the agent has no subagent lines to show or hide. A click
+-- shows or hides the subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and
+-- says what a click does.
+local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local running = crew.running
+	local pending = crew.waiting + crew.queued
+	if running == 0 and pending == 0 then
+		return nil
+	end
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
@@ -1159,10 +1155,8 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 		if running > STRIP_BARS then
 			table.insert(children, { k = "text", p = { text = "+" .. tostring(running - STRIP_BARS), role = ROLE.more } })
 		end
-	elseif crew.done > 0 then
-		table.insert(children, { k = "text", p = { text = tostring(crew.done) .. " done" } })
 	else
-		table.insert(children, { k = "text", p = { text = tostring(total) .. (if total == 1 then " subagent" else " subagents") } })
+		table.insert(children, { k = "text", p = { text = tostring(pending) .. (if pending == 1 then " subagent" else " subagents") } })
 	end
 	return {
 		k = "row",
@@ -1177,24 +1171,24 @@ local function stripNode(pane: string, crew: Crew, total: number, open: boolean)
 	}
 end
 
+-- Whether a subagent gets a line: a finished one (done or stopped) gets none, only the hover card counts it.
+local function lined(sub: subagents.Subagent): boolean
+	return sub.depth <= MAX_DEPTH and sub.status ~= "done" and sub.status ~= "aborted"
+end
+
 -- An agent draws at most this many subagent lines, and the whole view at most `VIEW_SUB_LINES`, in the order the
--- agents show: with none running, omp's tray lists every finished subagent of the session, and a canvas update holds
--- at most 2000 nodes and 256 KiB. A line with its hover card is about 10 nodes.
+-- agents show: a canvas update holds at most 2000 nodes and 256 KiB. A line with its hover card is about 10 nodes.
 local SUB_LINES = 20
 local VIEW_SUB_LINES = 100
 
--- The subagents of `subs` that get a line, at most `limit`: first the one the pane shows, then the failed ones (a
--- failure never hides), then the others not finished (running, waiting, queued), then the newest finished ones. Also
--- how many get none.
+-- The subagents of `subs` that get a line (see `lined`), at most `limit`: first the one the pane shows, then the
+-- failed ones (a failure never hides), then the newest of the others (running, waiting, queued). Also how many get
+-- none.
 local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
 	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
 	for index, sub in subs.agents do
-		if sub.depth <= MAX_DEPTH then
-			local rank = if viewing.shows(sub, shown)
-				then 3
-				elseif sub.status == "failed" then 2
-				elseif sub.status ~= "done" and sub.status ~= "aborted" then 1
-				else 0
+		if lined(sub) then
+			local rank = if viewing.shows(sub, shown) then 2 elseif sub.status == "failed" then 1 else 0
 			table.insert(candidates, { sub = sub, index = index, rank = rank })
 		end
 	end
@@ -1218,11 +1212,11 @@ local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: numbe
 end
 
 -- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
--- down per nesting level: every one while the lines are open (`agents.strip.open`), else only the failed ones (a
--- failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see
--- `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
--- subagents sit past the levels omp renders. This tab's agent, and its open lines, are one block, which `agents.css`
--- draws with the accent.
+-- down per nesting level: every one not finished while the lines are open (`agents.strip.open`), else only the
+-- failed ones (a failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES`
+-- (see `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
+-- subagents sit past the levels omp renders. With no strip (every subagent finished), the lines are closed. This
+-- tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1235,7 +1229,12 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local busy = crew.running + crew.waiting > 0
 	local open = if chosen ~= nil then chosen else shared.focused == agent.pane and busy
 	-- The strip goes right after the name, before the time.
-	table.insert(main.c :: { Node }, 3, stripNode(pane, crew, #subs.agents, open))
+	local strip = stripNode(pane, crew, open)
+	if strip then
+		table.insert(main.c :: { Node }, 3, strip)
+	else
+		open = false
+	end
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
@@ -1244,15 +1243,15 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local shown = if shared.focused == agent.pane then viewed else nil
 	local drawn, past = drawnSubs(subs, if open then shown else nil, math.min(SUB_LINES, shared.subLines))
 	for _, sub in subs.agents do
-		local selected = open and viewing.shows(sub, shown)
-		if selected then
-			(main.p :: { [string]: any }).role = rowRole("item", depth)
-		end
 		if sub.depth > MAX_DEPTH then
 			if sub.status == "running" then
 				deeper += 1
 			end
 		elseif (open or sub.status == "failed") and drawn[sub] then
+			local selected = open and viewing.shows(sub, shown)
+			if selected then
+				(main.p :: { [string]: any }).role = rowRole("item", depth)
+			end
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 			local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
 			table.insert(if open then lines else failed, line)
@@ -1306,11 +1305,19 @@ end
 -- How bad each quota status is; a quota that is fine has none and shows no line.
 local QUOTA_RANK: { [string]: number } = { exhausted = 2, warning = 1 }
 
--- A quota near or at its limit, with the seconds left until its window resets.
+-- A quota whose window has not reset, with the seconds left until it does.
 type HotQuota = { quota: Quota, left: number }
 
--- The quotas near or at their limit whose window has not reset at `time` (`os.time()`), the worst first: exhausted
--- before warning, then the higher use.
+-- Whether quota `a` is nearer its limit than `b`: exhausted before warning before ok, then the higher use.
+local function worse(a: Quota, b: Quota): boolean
+	local ra, rb = QUOTA_RANK[a.status] or 0, QUOTA_RANK[b.status] or 0
+	if ra ~= rb then
+		return ra > rb
+	end
+	return a.used > b.used
+end
+
+-- The quotas near or at their limit whose window has not reset at `time` (`os.time()`), the worst first.
 local function hotQuotas(quotas: { Quota }?, time: number): { HotQuota }
 	local hot: { HotQuota } = {}
 	local list: { Quota } = quotas or {}
@@ -1321,13 +1328,83 @@ local function hotQuotas(quotas: { Quota }?, time: number): { HotQuota }
 		end
 	end
 	table.sort(hot, function(a, b)
-		local ra, rb = QUOTA_RANK[a.quota.status], QUOTA_RANK[b.quota.status]
-		if ra ~= rb then
-			return ra > rb
-		end
-		return a.quota.used > b.quota.used
+		return worse(a.quota, b.quota)
 	end)
 	return hot
+end
+
+-- What the quota line shows: `shown`, for each provider at risk, its account with the most room (the one omp uses
+-- next) with that account's worst limit, the worst first; `all`, every quota near or at its limit, grouped by
+-- provider (the providers of `shown` first, in its order); and `named`, the providers with 2 or more accounts, whose
+-- quotas show their account's name. A provider is at risk when the worst limit of each of its accounts is near or at
+-- its limit: omp rotates to an account with room, so one exhausted account alone stops nothing.
+type QuotaReport = { shown: { HotQuota }, all: { HotQuota }, named: { [string]: boolean } }
+
+local function quotaReport(quotas: { Quota }?, time: number): QuotaReport
+	-- The worst current limit of each account, by provider and account name ("" for none).
+	local worst: { [string]: { [string]: HotQuota } } = {}
+	local providers: { string } = {}
+	local list: { Quota } = quotas or {}
+	for _, quota in list do
+		local left = quota.resetsAt / 1000 - time
+		if left > 0 then
+			local accounts = worst[quota.provider]
+			if not accounts then
+				accounts = {}
+				worst[quota.provider] = accounts
+				table.insert(providers, quota.provider)
+			end
+			local key = quota.account or ""
+			local current = accounts[key]
+			if not current or worse(quota, current.quota) then
+				accounts[key] = { quota = quota, left = left }
+			end
+		end
+	end
+	local shown: { HotQuota } = {}
+	local named: { [string]: boolean } = {}
+	for _, provider in providers do
+		local roomiest: HotQuota? = nil
+		local count = 0
+		local atRisk = true
+		for _, limit in worst[provider] do
+			count += 1
+			if not QUOTA_RANK[limit.quota.status] then
+				atRisk = false
+			end
+			if not roomiest or worse(roomiest.quota, limit.quota) then
+				roomiest = limit
+			end
+		end
+		named[provider] = count > 1
+		if atRisk and roomiest then
+			table.insert(shown, roomiest)
+		end
+	end
+	table.sort(shown, function(a, b)
+		return worse(a.quota, b.quota)
+	end)
+	-- The tooltip's providers: those of the line in its order, then the others, the one with the worst limit first.
+	local all = hotQuotas(quotas, time)
+	local place: { [string]: number } = {}
+	for i, entry in shown do
+		place[entry.quota.provider] = i
+	end
+	local index: { [HotQuota]: number } = {}
+	for i, entry in all do
+		index[entry] = i
+		if not place[entry.quota.provider] then
+			place[entry.quota.provider] = #shown + i
+		end
+	end
+	table.sort(all, function(a, b)
+		local pa, pb = place[a.quota.provider], place[b.quota.provider]
+		if pa ~= pb then
+			return pa < pb
+		end
+		return index[a] < index[b]
+	end)
+	return { shown = shown, all = all, named = named }
 end
 
 -- Which agent each pin names, by the pin's index: the running agent that has the pin's session file open, else the
@@ -1841,11 +1918,12 @@ local function viewButton(label: string, view: View, shown: View): Node
 	}
 end
 
--- A quota as one line, in two parts: `Claude · work · 7d Fable 97%` and its reset, `· resets Sun`. The reset reads as
--- a weekday when a day or more away, else as the time left (`resets in 38m`).
-local function quotaText(quota: Quota, left: number): (string, string)
+-- A quota as one line, in two parts: `Claude · work · 7d Fable 97%` and its reset, `· resets Sun`. The account's name
+-- shows only when `named` (its provider has 2 or more accounts). The reset reads as a weekday when a day or more away,
+-- else as the time left (`resets in 38m`).
+local function quotaText(quota: Quota, left: number, named: boolean): (string, string)
 	local parts = { quota.provider }
-	if quota.account then
+	if named and quota.account then
 		table.insert(parts, quota.account)
 	end
 	table.insert(parts, string.format("%s %d%%", quota.label, math.round(quota.used * 100)))
@@ -1853,31 +1931,33 @@ local function quotaText(quota: Quota, left: number): (string, string)
 	return table.concat(parts, " · "), "· resets " .. reset
 end
 
--- The quota line under the Live/Recent switch: the worst quota near or at its limit (exhausted before warning, then
--- the higher use) after a square in the warning or the error color, "+N" for the others, and all of them in the
--- tooltip; nil while every quota is fine. When the line is too narrow, its reset is the part cut first.
+-- The quota line under the Live/Recent switch, while a provider is at risk (see `quotaReport`): the account with the
+-- most room of the worst provider at risk, with its worst limit, after a square in the warning or the error color,
+-- then "+N" for the other providers at risk. The tooltip lists every limit near or at its limit, of every account.
+-- Nil while no provider is at risk. When the line is too narrow, its reset is the part cut first.
 local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	if not time then
 		return nil
 	end
-	local hot = hotQuotas(quotas, time)
-	if #hot == 0 then
+	local report = quotaReport(quotas, time)
+	if #report.shown == 0 then
 		return nil
 	end
 	local lines: { string } = {}
-	for _, entry in hot do
-		local main, reset = quotaText(entry.quota, entry.left)
+	for _, entry in report.all do
+		local main, reset = quotaText(entry.quota, entry.left, report.named[entry.quota.provider])
 		table.insert(lines, main .. " " .. reset)
 	end
-	local worst = hot[1]
-	local main, reset = quotaText(worst.quota, worst.left)
+	local first = report.shown[1]
+	local main, reset = quotaText(first.quota, first.left, report.named[first.quota.provider])
 	local parts: { Node } = {
-		squareNode(if worst.quota.status == "exhausted" then "failed" else "waiting"),
+		squareNode(if first.quota.status == "exhausted" then "failed" else "waiting"),
 		nameNode(main, nil, true),
 		detailNode(reset),
 	}
-	if #hot > 1 then
-		table.insert(parts, { k = "text", p = { text = "+" .. tostring(#hot - 1), wrap = "none", role = ROLE.meta } })
+	if #report.shown > 1 then
+		local more = "+" .. tostring(#report.shown - 1)
+		table.insert(parts, { k = "text", p = { text = more, wrap = "none", role = ROLE.meta } })
 	end
 	return {
 		k = "row",
@@ -1887,8 +1967,8 @@ local function quotaLine(quotas: { Quota }?, time: number?): Node?
 end
 
 -- The head: the Live/Recent switch, with the waiting mark and the number of Needs you cards after Live while any
--- shows (in both views), and under it the quota line while a quota is near or at its limit. What the old ⋯ menu did
--- stays in the palette commands.
+-- shows (in both views), and under it the quota line while a provider is at risk (see `quotaReport`). What the old ⋯
+-- menu did stays in the palette commands.
 local function chrome(view: View, input: Input, needs: number): Node
 	local views: { Node } = { viewButton("Live", "live", view) }
 	if needs > 0 then
