@@ -707,4 +707,63 @@ function visible.hoverMuted(view: Node, text: string): { string }
 	return out
 end
 
+-- What one canvas update of the tree costs, as the canvas counts it: the nodes, hover-card nodes included, and the
+-- bytes of the tree as compact JSON. A canvas update holds at most 2000 nodes and 256 KiB.
+local function encode(value: any, out: { string })
+	local kind = type(value)
+	if kind == "string" then
+		local escaped = string.gsub(value, '[%c"\\]', function(c: string): string
+			return string.format("\\u%04x", string.byte(c))
+		end)
+		table.insert(out, '"' .. escaped .. '"')
+	elseif kind == "number" then
+		table.insert(out, string.format("%.14g", value))
+	elseif kind == "boolean" then
+		table.insert(out, tostring(value))
+	elseif kind == "table" then
+		if #value > 0 or next(value) == nil then
+			table.insert(out, "[")
+			for i, item in value do
+				if i > 1 then
+					table.insert(out, ",")
+				end
+				encode(item, out)
+			end
+			table.insert(out, "]")
+		else
+			table.insert(out, "{")
+			local first = true
+			for key, item in value do
+				if not first then
+					table.insert(out, ",")
+				end
+				first = false
+				encode(tostring(key), out)
+				table.insert(out, ":")
+				encode(item, out)
+			end
+			table.insert(out, "}")
+		end
+	else
+		table.insert(out, "null")
+	end
+end
+
+function visible.size(view: Node): (number, number)
+	local function count(n: Node): number
+		local total = 1
+		for _, child in kids(n) do
+			total += count(child)
+		end
+		local card = props(n).hovercard
+		if type(card) == "table" then
+			total += count(card)
+		end
+		return total
+	end
+	local out: { string } = {}
+	encode(view, out)
+	return count(view), #table.concat(out)
+end
+
 return visible

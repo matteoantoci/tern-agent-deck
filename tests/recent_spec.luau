@@ -178,23 +178,16 @@ t.test("the Live view lists no closed session", function()
 	t.eq(visible.zones(view({ agent({}) }, { session(1, "Plan", HOUR) }, { view = "live" })), { "■ Idle 1" })
 end)
 
--- A canvas update holds at most 2000 nodes, so a day shows at most its 50 newest sessions and then one muted
--- "N more" line that takes no click.
-local function count(node: any): number
-	local n = 1
-	for _, child in (node.c or {}) :: { any } do
-		n += count(child)
-	end
-	return n
-end
-
+-- A canvas update holds at most 2000 nodes and 256 KiB, so the whole view shows at most its 50 newest sessions and
+-- then one muted "N more" line that takes no click.
 t.test("an open Earlier with 500 sessions shows its 50 newest, then one line for the rest", function()
 	local many: { any } = {}
 	for n = 1, 500 do
 		table.insert(many, session(n, "Old " .. n, 8 * DAY + n * HOUR, { file = SESSIONS .. n .. ".jsonl" }))
 	end
 	local shown = view({}, many, { earlierOpen = true })
-	t.eq(count(shown) < 1500, true)
+	local nodes = visible.size(shown)
+	t.eq(nodes < 1500, true)
 	local lines = visible.zone(shown, "Earlier")
 	t.eq(lines[#lines], ":more 450 more")
 	t.eq(lines[2], line("Old 1", "8d", false))
@@ -210,6 +203,41 @@ t.test("a day with more than 50 sessions is capped the same way", function()
 	local lines = visible.zone(view({}, many), "Today")
 	t.eq(#lines, 52)
 	t.eq(lines[52], ":more 10 more")
+end)
+
+t.test("the cap counts the sessions of every day: the view with all days and Earlier open fits one canvas update", function()
+	-- Real-length session paths in 8 projects, 30 sessions each in Today, Yesterday and This week, 500 in Earlier.
+	local many: { any } = {}
+	local n = 0
+	local function add(title: string, ago: number)
+		n += 1
+		local project = "/Users/me/Personal/project-with-a-long-name-" .. (n % 8)
+		local folder = "/Users/me/.omp/agent/sessions/-Personal-project-with-a-long-name-" .. (n % 8) .. "/"
+		local path = folder .. string.format("2026-11-%02dT08-21-12-853Z_01a1bf65-95ef-77f9-baad-ec9dc64f%04d.jsonl", 1 + n % 28, n)
+		table.insert(many, session(n, ICON .. " " .. title .. " with a title of usual length", ago, { file = path, cwd = project, repo = project }))
+	end
+	for i = 1, 30 do
+		add("Today " .. i, i * MIN)
+	end
+	for i = 1, 30 do
+		add("Yesterday " .. i, 13 * HOUR + i * MIN)
+	end
+	for i = 1, 30 do
+		add("Week " .. i, 37 * HOUR + i * MIN)
+	end
+	for i = 1, 500 do
+		add("Old " .. i, 8 * DAY + i * HOUR)
+	end
+	local shown = view({}, many, { earlierOpen = true })
+	local nodes, bytes = visible.size(shown)
+	t.eq(nodes < 1500, true)
+	t.eq(bytes < 256 * 1024, true)
+	t.eq(#visible.zone(shown, "Today") > 0, true)
+	local yesterday = visible.zone(shown, "Yesterday")
+	t.eq(yesterday[#yesterday], ":more 40 more")
+	-- This week has no place left, so it does not show.
+	t.eq(#visible.zones(shown), 3)
+	t.eq(visible.zone(shown, "Earlier"), { ":more 500 more" })
 end)
 
 return nil

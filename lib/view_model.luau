@@ -2057,21 +2057,14 @@ end
 
 -- The Recent view: the closed sessions by day (Today, Yesterday, This week), each day its count and its projects
 -- (see `recentProjects`), then "Earlier" folded with its count; each day hidden while empty. A calm line shows while
--- there is no closed session. A day shows at most its `RECENT_CAP` newest sessions, then one muted "N more" line
--- that takes no click: a canvas update holds at most 2000 nodes.
+-- there is no closed session. The whole view shows at most the `RECENT_CAP` newest sessions: a canvas update holds at
+-- most 2000 nodes and 256 KiB. The sessions past the cap go into one muted "N more" line that takes no click, on the
+-- last day that shows; a day with no place left does not show. An open Earlier with no place left shows only its
+-- own "N more" line.
 local RECENT_CAP = 50
 
-local function recentDay(key: string, sessions: { Session }, input: Input): { Node }
-	local shown = sessions
-	if #sessions > RECENT_CAP then
-		shown = table.move(sessions, 1, RECENT_CAP, 1, {})
-	end
-	local body = recentProjects(shown, input)
-	if #sessions > RECENT_CAP then
-		local text = string.format("%d more", #sessions - RECENT_CAP)
-		table.insert(body, infoLine(key .. "-more", iconNode("more", "muted"), text, "muted", 0))
-	end
-	return body
+local function moreLine(key: string, count: number): Node
+	return infoLine(key .. "-more", iconNode("more", "muted"), string.format("%d more", count), "muted", 0)
 end
 
 local function recentBody(input: Input): { Node }
@@ -2090,23 +2083,44 @@ local function recentBody(input: Input): { Node }
 		end
 	end
 	local children: { Node } = {}
+	local budget = RECENT_CAP
+	local hidden = 0
+	local lastBody: { Node }? = nil
+	local lastKey = ""
 	for i, day in days do
 		local sessions = byDay[i]
 		if #sessions > 0 then
 			local key = "day-" .. string.lower((string.gsub(day.name, " ", "-")))
 			if day.name ~= "Earlier" then
-				table.insert(children, zone(key, nil, day.name, tostring(#sessions), recentDay(key, sessions, input)))
+				local take = math.min(budget, #sessions)
+				hidden += #sessions - take
+				if take > 0 then
+					budget -= take
+					local body = recentProjects(table.move(sessions, 1, take, 1, {}), input)
+					lastBody, lastKey = body, key
+					table.insert(children, zone(key, nil, day.name, tostring(#sessions), body))
+				end
 			else
 				local open = input.earlierOpen == true
 				local body: { Node } = { foldRow("head", "Earlier", #sessions, open, "earlier", 0) }
 				if open then
-					for _, project in recentDay(key, sessions, input) do
-						table.insert(body, project)
+					local take = math.min(budget, #sessions)
+					budget -= take
+					if take > 0 then
+						for _, project in recentProjects(table.move(sessions, 1, take, 1, {}), input) do
+							table.insert(body, project)
+						end
+					end
+					if #sessions > take then
+						table.insert(body, moreLine(key, #sessions - take))
 					end
 				end
 				table.insert(children, { k = "col", p = { key = key, role = ROLE.zone, gap = "none" }, c = body })
 			end
 		end
+	end
+	if lastBody and hidden > 0 then
+		table.insert(lastBody, moreLine(lastKey, hidden))
 	end
 	if #children == 0 then
 		table.insert(children, { k = "text", p = { key = "calm", role = ROLE.calm, text = "No closed omp sessions yet" } })
