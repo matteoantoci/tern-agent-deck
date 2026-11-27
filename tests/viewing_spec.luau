@@ -8,7 +8,7 @@ local viewModel = require("../lib/view_model")
 local viewing = require("../lib/viewing")
 
 local function sub(name: string, depth: number?, extra: { [string]: any }?): { [string]: any }
-	local s: { [string]: any } = { id = "dx." .. name, name = name, status = "running", depth = depth or 1, role = "task" }
+	local s: { [string]: any } = { id = (string.gsub(name, ">", ".")), name = name, status = "running", depth = depth or 1, role = "task" }
 	for k, v in (extra or {}) :: { [string]: any } do
 		s[k] = v
 	end
@@ -16,7 +16,7 @@ local function sub(name: string, depth: number?, extra: { [string]: any }?): { [
 end
 
 local LAST_READ: any = {
-	agents = { sub("Ticket03"), sub("Ticket07"), sub("Merge0407>Ticket04", 2, { parent = "Ticket07" }) },
+	agents = { sub("Ticket03"), sub("Ticket07"), sub("Ticket07>Ticket04", 2, { parent = "Ticket07" }) },
 	incomplete = false,
 }
 
@@ -70,7 +70,7 @@ t.test("while omp shows a subagent, its agent keeps the subagent rows and the sh
 		"●(Working) Lead",
 		"○(Not live) Ticket03 task",
 		"●(Running) Ticket07 task",
-		"○(Not live) Merge0407>Ticket04 task · in Ticket07",
+		"○(Not live) Ticket04 task · in Ticket07",
 		"●(Working) Other",
 	})
 	t.eq(visible.selected(out), { "●(Running) Ticket07 task" })
@@ -110,8 +110,8 @@ end)
 
 t.test("a nested subagent omp shows is selected by its full id", function()
 	t.eq(
-		visible.selected(after(nil, dock({ "Merge0407", "Merge0407.Ticket04" }), 7)),
-		{ "●(Running) Merge0407>Ticket04 task · in Ticket07" }
+		visible.selected(after(nil, dock({ "Ticket07", "Ticket07.Ticket04" }), 7)),
+		{ "●(Running) Ticket04 task · in Ticket07" }
 	)
 end)
 

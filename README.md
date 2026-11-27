@@ -50,7 +50,7 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | The Live and Recent buttons | Switch the view. |
 | ⋯ in the head | Opens a menu: New tab here, Arrange tabs by project, Toggle sidebar. |
 
-Point at a row to see its card: the state and the turn timer, then a grid with the model as `provider/model`, the effort and a subagent's own estimate of its progress, then the last message. A long last message shows a short summary that omp's light model (`@smol`) writes: about 4 seconds after the turn ends, or, while the agent works, once its text stays the same for 15 seconds. Until a new summary arrives, the card keeps the one before.
+Point at a row to see its card: the state and the turn timer, then a grid with the model as `provider/model` and the effort (and, for a subagent, its type, the agent it runs under and what it does now), then the last message. A long last message shows a short summary that omp's light model (`@smol`) writes: about 4 seconds after the turn ends, or, while the agent works, once its text stays the same for 15 seconds. Until a new summary arrives, the card keeps the one before.
 
 ### Right-click menu
 
@@ -76,15 +76,15 @@ Rename is available for running omp agents. It is off while omp shows a subagent
 ## ⚙️ How it works
 
 - The plugin opens one canvas per tab, on the right edge.
-- It reads Tern's agent list and the task cards of omp's native view. It sends events to an agent only when you click Interrupt, Rename, a subagent row, or an agent row while omp shows a subagent.
+- It reads Tern's agent list and omp's tray of subagents in each agent's dock, so a subagent that a message wakes again shows as running too. It sends events to an agent only when you click Interrupt, Rename, a subagent row, or an agent row while omp shows a subagent.
 - It finds closed sessions in `~/.omp/agent/sessions`, and the session file of each live agent in `tern inspect --json`.
 - It keeps pins, folds, the view and the width in `tern.kv`. All windows share this state.
-- It runs only local commands. No data leaves your machine.
+- It runs local commands only, with one exception: a long last message of an agent (up to 8,000 bytes) goes to the model of omp's `@smol` role, through omp, for the summary in the row's card. That model's provider receives the text.
 
 ## 🧭 Limitations
 
 - Tern's API has no window-level panel, so each tab has its own copy of the sidebar. In a tab with splits, the sidebar sits beside the top-right pane and does not cover the full height.
-- Subagents, the Recent view, Rename and the copy items need omp. Other agents show only as rows.
+- Subagents, the Recent view, Rename and the copy items need omp. Other agents show only as rows. Subagents also need Tern's agents tray setting, which is on by default.
 - Closed sessions have no Rename, because omp has no command for it.
 - Tern adds its own **Copy** item at the end of each right-click menu. A plugin cannot remove it.
 - A canvas takes no text input, so the sidebar has no search box. Use the command palette.

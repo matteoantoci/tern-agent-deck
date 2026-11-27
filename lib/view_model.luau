@@ -107,6 +107,9 @@ export type Input = {
 	--- The omp id of the subagent each pane's omp shows in its view ("Viewing <name>"), by pane: while the focused
 	--- pane shows one, that subagent's row is drawn selected instead of its agent's.
 	viewing: { [number]: string }?,
+	--- The model (`provider/model`) of each session file the session reader read (main agents' and subagents'), by
+	--- file; a subagent's hover card names its model from it.
+	routes: { [string]: string }?,
 	--- The id the plugin runs under (`tern.plugin.id`), which names its commands; the status segment has no click
 	--- without it.
 	plugin: string?,
@@ -149,7 +152,14 @@ local function clip(text: string, bytes: number): string
 end
 
 -- Context every row reads: the time, how many agents share each tab, and the focused pane.
-type Shared = { now: number, perTab: { [number]: number }, focused: number?, viewing: { [number]: string } }
+type Shared = {
+	now: number,
+	perTab: { [number]: number },
+	focused: number?,
+	viewing: { [number]: string },
+	--- The model (`provider/model`) of each session file the reader read, by file.
+	routes: { [string]: string },
+}
 
 local function nonEmpty(text: string?): string?
 	if type(text) ~= "string" then
@@ -417,11 +427,6 @@ local function modelRoute(model: string?): string?
 		route = base
 	end
 	return nonEmpty(route)
-end
-
--- How much of its task a subagent says it finished, as a whole percentage.
-local function percent(done: number): string
-	return string.format("%d%%", math.floor(done * 100 + 0.5))
 end
 
 -- The mark at the right end of an agent row: the bell while it waits for the user, in neutral (the state dot
@@ -754,10 +759,15 @@ local function subagentFile(main: string?, name: string): string?
 	return path .. ".jsonl"
 end
 
+--- The session file of the subagent `name` (its omp id with `>` between levels) of the agent whose session file is
+--- `main`; nil when it cannot be told.
+viewModel.subagentFile = subagentFile
+
 -- One running subagent, at any nesting level, at `depth` in the tree (one level under its agent): the pulsing
--- running dot, the name, and a dim detail with its type and, below the first level, the subagent it runs under. The
--- hover card repeats them with the model, effort, current tool and intent. A click asks to show the subagent in omp's
--- view (`subagent=<pane> <node id>`); a right-click copies the ID or path of its own session file, found from its
+-- running dot, its own name (the last level of its omp id), and a dim detail with its type and, below the first
+-- level, the subagent it runs under. The hover card repeats them with the model (as its session file names it,
+-- `provider/model`, else omp's model id), the effort and what it does now. A click asks to show the subagent in omp's
+-- view (`subagent=<pane> <omp id>`); a right-click copies the ID or path of its own session file, found from its
 -- agent's (`agentFile`). A `frozen` row (its state is the last one read, while omp shows another subagent) has a
 -- hollow dim dot that does not pulse, and says so.
 local function subRow(
@@ -766,20 +776,24 @@ local function subRow(
 	agentFile: string?,
 	depth: number,
 	selected: boolean,
-	frozen: boolean
+	frozen: boolean,
+	routes: { [string]: string }
 ): Node
 	local role = nonEmpty(sub.role)
 	local parent = if sub.depth > 1 then nonEmpty(sub.parent) else nil
+	local levels = string.split(sub.name, ">")
+	local own = levels[#levels]
 	local detail: { string } = {}
 	if role then
 		table.insert(detail, role)
 	end
 	if parent then
-		table.insert(detail, "in " .. parent)
+		local parents = string.split(parent, ">")
+		table.insert(detail, "in " .. parents[#parents])
 	end
-	local state = if frozen then "Not live" else "Running"
+	local state = if frozen then "Not live" elseif sub.waiting then "Waiting on its subagents" else "Running"
 	local children: { Node } =
-		{ dotNode(if frozen then "dim" else "accent", state, frozen, not frozen), nameNode(sub.name, nil, #detail > 0) }
+		{ dotNode(if frozen then "dim" else "accent", state, frozen, not frozen), nameNode(own, nil, #detail > 0) }
 	if #detail > 0 then
 		table.insert(children, detailNode(table.concat(detail, " · ")))
 	end
@@ -790,7 +804,8 @@ local function subRow(
 	if parent then
 		table.insert(facts, { k = "Under", v = parent })
 	end
-	local model = modelRoute(sub.model)
+	local file = subagentFile(agentFile, sub.name)
+	local model = modelRoute(file and routes[file]) or modelRoute(sub.model)
 	if model then
 		table.insert(facts, { k = "Model", v = model })
 	end
@@ -798,16 +813,9 @@ local function subRow(
 	if effort then
 		table.insert(facts, { k = "Effort", v = effort })
 	end
-	if sub.done then
-		table.insert(facts, { k = "Progress", v = percent(sub.done) })
-	end
-	local tool = nonEmpty(sub.tool)
-	if tool then
-		table.insert(facts, { k = "Tool", v = tool })
-	end
 	local intent = nonEmpty(sub.intent)
 	if intent then
-		table.insert(facts, { k = "Intent", v = intent })
+		table.insert(facts, { k = "Doing", v = intent })
 	end
 	local rest: { Node } = {}
 	if frozen then
@@ -821,12 +829,9 @@ local function subRow(
 			role = rowRole(if selected then "on" else "item", depth),
 			actions = {
 				click = "subagent=" .. pane .. " " .. sub.id,
-				menu = copyItems(
-					subagentFile(agentFile, sub.name),
-					if agentFile then "The subagent's name is no omp id" else NO_SESSION_FILE
-				),
+				menu = copyItems(file, if agentFile then "The subagent's name is no omp id" else NO_SESSION_FILE),
 			},
-			hovercard = card(cardHead(sub.name, state), facts, rest),
+			hovercard = card(cardHead(own, state), facts, rest),
 		},
 		c = children,
 	}
@@ -896,7 +901,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 				(main.p :: { [string]: any }).role = rowRole("item", depth)
 			end
 			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
-			table.insert(lines, subRow(sub, pane, agent.sessionFile, depth + 1, selected, frozen))
+			table.insert(lines, subRow(sub, pane, agent.sessionFile, depth + 1, selected, frozen, shared.routes))
 		elseif sub.status == "done" then
 			done += 1
 		elseif sub.status == "failed" then
@@ -1250,7 +1255,13 @@ local function status(agents: { Agent }, plugin: string?): { Segment }
 end
 
 local function context(input: Input): Shared
-	local shared: Shared = { now = input.now, perTab = {}, focused = input.focused, viewing = input.viewing or {} }
+	local shared: Shared = {
+		now = input.now,
+		perTab = {},
+		focused = input.focused,
+		viewing = input.viewing or {},
+		routes = input.routes or {},
+	}
 	for _, agent in input.agents do
 		if agent.tab then
 			shared.perTab[agent.tab] = (shared.perTab[agent.tab] or 0) + 1

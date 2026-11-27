@@ -6,7 +6,7 @@ local t = require("./harness")
 local viewing = require("../lib/viewing")
 
 local function sub(name: string): any
-	return { id = "dx." .. name, name = name, status = "running", depth = 1 }
+	return { id = (string.gsub(name, ">", ".")), name = name, status = "running", depth = 1 }
 end
 
 -- A scoped read of the pane's dock (`root = "dock"`) shaped like the live one (2026-11-09): omp's HUD, then the

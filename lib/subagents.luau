@@ -1,5 +1,14 @@
 --!strict
--- The subagents of an omp agent, read from the TSP `agent` nodes of its surface (`cx.session:surface()`).
+-- The subagents of an omp agent, read from the tray in the dock of its surface (`cx.session:surface(pane, {root =
+-- "dock"})`): omp puts one card (`omp.tray.card`, `item = "agent"`) for each of its subagents there, at every nesting
+-- level, from its own agent registry, so an agent that runs again after its `task` call ended (a message revived or
+-- woke it) shows as running. Tern draws the tray while its "agents tray" setting is on (the default); omp then hides
+-- its HUD counter.
+-- A card carries the agent's omp id (`ref`): name-based, a `.` between nesting levels (`Anna.Bob`), so the id gives the
+-- depth and the parent. Its status, whether it only waits on its own subagents (`waiting`), its accessible name
+-- (`aria`: name, type, status, what it does, its tool count) and, as children, its model with the thinking level
+-- (`omp.tray.model`: `claude-opus-5-5 · high`) and what it does now (`omp.tray.call`).
+-- Checked live 2026-11-27 (omp 19.2.1, Tern 0.9.36).
 -- Pure: it takes the surface trees the reader got from Tern and calls no Tern API, so the `luau` CLI tests it.
 -- It uses no `if … then … else` expression, so a Carly probe can `loadstring` it against a live surface.
 
@@ -7,103 +16,65 @@ local subagents = {}
 
 local REGIONS = { "main", "dock", "layer" }
 
-local function isTask(node: TspNode): boolean
-	local p = node.p
-	return node.k == "tool" and type(p) == "table" and p.name == "task"
-end
-
-local function walk(node: TspNode?, visit: (TspNode) -> ())
-	if type(node) ~= "table" then
-		return
-	end
-	visit(node)
-	if type(node.c) == "table" then
-		for _, child in node.c do
-			walk(child, visit)
-		end
-	end
-end
-
--- The ids of the `task` tool nodes in `tree` whose status passes `keep`, in tree order (oldest call first).
-local function tasks(tree: any, keep: (status: any) -> boolean): { string }
-	local found: { string } = {}
-	if type(tree) ~= "table" then
-		return found
-	end
-	for _, region in REGIONS do
-		walk(tree[region], function(node)
-			if isTask(node) and keep((node.p :: any).status) then
-				table.insert(found, node.id)
-			end
-		end)
-	end
-	return found
-end
-
---- The ids of every running `task` tool node in `tree`, in tree order (oldest call first); empty when none runs.
-function subagents.runningTasks(tree: any): { string }
-	return tasks(tree, function(status)
-		return status == "running"
-	end)
-end
-
---- The ids of every `task` tool node in `tree` that no longer runs, in tree order. omp shows an agent that runs again
---- after its call ended (a message revived or woke it, or it kept running after a cancel) as running in that call's
---- card, while the call keeps its final status.
-function subagents.settledTasks(tree: any): { string }
-	return tasks(tree, function(status)
-		return status ~= "running" and status ~= "pending"
-	end)
-end
-
---- One subagent: its `agent` node's id and props, how many agents it sits under (1: the task call's own), and the
---- name of the subagent it runs under (nil at the first level).
+--- One subagent: its omp id, its name as omp shows it (the id with `>` between levels: `Anna>Bob`), how many agents
+--- it sits under (1: one of the main agent's own), and the name of the subagent it runs under (nil at the first level).
 export type Subagent = {
 	id: string,
 	name: string,
-	--- `pending | running | done | failed | aborted | idle | parked`.
+	--- `pending | running | done | failed | aborted`.
 	status: string,
 	depth: number,
 	parent: string?,
+	--- The model id, without its provider (`claude-opus-5-5`).
 	model: string?,
-	--- The subagent type (`task`, `scout`, `reviewer`, `explore`): the `agent` prop.
+	--- The subagent type (`task`, `scout`, `reviewer`), when omp names one.
 	role: string?,
-	--- The thinking-effort level (`low` … `xhigh`), from the `thinking` prop's theme token (`thinkingHigh`).
+	--- The thinking-effort level (`low` … `xhigh`), when the model thinks.
 	effort: string?,
-	--- The tool the subagent runs now and its intent line.
-	tool: string?,
+	--- What it does now: its current call's intent, or its last line.
 	intent: string?,
-	--- The subagent's own estimate of how much of its task it finished, 0 to 1 (`stats.done`): omp asks a running
-	--- subagent for it from about 2 minutes on; nil before that and once it ends.
-	done: number?,
+	--- Running, but only waiting on its own subagents.
+	waiting: boolean?,
 }
 
---- The subagents of one running `task` call; `incomplete` when the node budget left part of the tree out; `frozen`
---- when they are the last ones read, kept while omp shows one of them and cannot be read (see `viewing.luau`).
+--- The subagents of one agent, in tree order (each one before the subagents it runs); `incomplete` when the node
+--- budget left part of the tray out; `frozen` when they are the last ones read, kept while the dock could not be read
+--- (see `viewing.luau`).
 export type Subagents = { agents: { Subagent }, incomplete: boolean, frozen: boolean? }
 
+-- The tray's statuses, as the sidebar names them.
+local STATUS: { [string]: string } = {
+	queued = "pending",
+	running = "running",
+	done = "done",
+	failed = "failed",
+	stopped = "aborted",
+}
+
+-- The words of the `aria` name that are the status, not the type.
+local STATE_WORDS: { [string]: boolean } = { queued = true, running = true, waiting = true, done = true, failed = true, stopped = true }
+
+local LEVELS: { [string]: boolean } = { off = true, minimal = true, low = true, medium = true, high = true, xhigh = true, max = true }
+
 -- TSP text: one string or a list of `{t, s?}` spans. Anything else (`tern.json.null`) is no text.
-local function plain(text: any): string?
-	if type(text) == "string" then
-		return text
+local function plain(node: any): string?
+	local p = node.p
+	if type(p) ~= "table" then
+		return nil
 	end
-	if type(text) ~= "table" then
+	if type(p.text) == "string" then
+		return p.text
+	end
+	if type(p.spans) ~= "table" then
 		return nil
 	end
 	local parts: { string } = {}
-	for _, span in text do
+	for _, span in p.spans do
 		if type(span) == "table" and type(span.t) == "string" then
 			table.insert(parts, span.t)
 		end
 	end
 	return table.concat(parts)
-end
-
-local function str(value: any): string?
-	if type(value) == "string" then
-		return value
-	end
-	return nil
 end
 
 -- A non-empty string, else nil.
@@ -114,101 +85,170 @@ local function word(value: any): string?
 	return nil
 end
 
-local LEVELS = { off = true, minimal = true, low = true, medium = true, high = true, xhigh = true, max = true }
-
--- The thinking level of an agent node's `thinking` prop: omp sends the theme token of its model chip's dot
--- (`thinkingHigh`; `max` also sends `thinkingXhigh`), and a plain level is taken as it is.
-local function level(thinking: any): string?
-	if type(thinking) ~= "string" then
+-- The text of the first node under `node` (itself included) whose role is `role`.
+local function roleText(node: any, role: string): string?
+	if type(node) ~= "table" then
 		return nil
 	end
-	local name = string.lower(string.match(thinking, "^thinking(%a+)$") or thinking)
-	if LEVELS[name] then
-		return name
+	if type(node.p) == "table" and node.p.role == role then
+		return word(plain(node))
+	end
+	if type(node.c) == "table" then
+		for _, child in node.c do
+			local found = roleText(child, role)
+			if found then
+				return found
+			end
+		end
 	end
 	return nil
 end
 
---- The subagents in a read with `root` set to a `task` node, in tree order, at every level: omp puts a subagent's
---- own subagents as `agent` children of its node. For a call that no longer runs, only its agents that run again,
---- with their own subagents. Nil when that node is no longer a `task` call (the id now names another node), or
---- when the call ended and none of its agents runs.
-function subagents.extract(tree: any): Subagents?
-	if type(tree) ~= "table" or type(tree.main) ~= "table" then
-		return nil
-	end
-	local root: TspNode = tree.main
-	if not isTask(root) then
-		return nil
-	end
-	local settled = (root.p :: any).status ~= "running"
-	local out: Subagents = { agents = {}, incomplete = (tonumber(tree.more) or 0) > 0 }
-	local function visit(node: TspNode, depth: number, parent: string?)
-		if (tonumber(node.more) or 0) > 0 then
-			out.incomplete = true
-		end
-		local p = node.p
-		local below = depth
-		local under = parent
-		if node.k == "agent" and type(p) == "table" then
-			below = depth + 1
-			-- `tool` is `tern.json.null` while no tool runs.
-			local tool: { [string]: any } = p.tool
-			if type(tool) ~= "table" then
-				tool = {}
-			end
-			local stats: { [string]: any } = p.stats
-			if type(stats) ~= "table" then
-				stats = {}
-			end
-			local done: number? = nil
-			if type(stats.done) == "number" then
-				done = math.clamp(stats.done, 0, 1)
-			end
-			local name = str(p.name) or node.id
-			table.insert(out.agents, {
-				id = node.id,
-				name = name,
-				status = str(p.status) or "pending",
-				depth = below,
-				parent = parent,
-				model = str(p.model),
-				role = word(p.agent),
-				effort = level(p.thinking),
-				tool = str(tool.name),
-				intent = plain(tool.intent),
-				done = done,
-			})
-			under = name
-		end
-		if type(node.c) == "table" then
-			for _, child in node.c do
-				visit(child, below, under)
-			end
+-- Whether `id` is an omp subagent id: levels of letters, digits, `_` and `-`, joined by `.` (the main agent's helpers,
+-- such as `Main/advisor`, are none).
+local function isAgentId(id: string): boolean
+	for _, level in string.split(id, ".") do
+		if not string.match(level, "^[%w_%-]+$") then
+			return false
 		end
 	end
-	if settled then
-		if (tonumber(root.more) or 0) > 0 then
-			out.incomplete = true
-		end
-		if type(root.c) == "table" then
-			for _, child in root.c do
-				local p = child.p
-				if child.k == "agent" and type(p) == "table" and p.status == "running" then
-					visit(child, 0, nil)
-				end
-			end
-		end
-		if #out.agents == 0 then
-			return nil
-		end
-	else
-		visit(root, 0, nil)
-	end
-	return out
+	return true
 end
 
---- The subagent with node id `id` among `subs`; nil when none has it.
+-- One card's subagent; nil for a card that is no subagent's.
+local function card(node: any): Subagent?
+	local p = node.p
+	local id = word(p.ref)
+	if p.item ~= "agent" or not id or not isAgentId(id) then
+		return nil
+	end
+	local levels = string.split(id, ".")
+	local parent: string? = nil
+	if #levels > 1 then
+		parent = table.concat(levels, ">", 1, #levels - 1)
+	end
+	local name = table.concat(levels, ">")
+	-- `aria`: name, then the type when it says more than the name, then the status.
+	local role: string? = nil
+	if type(p.aria) == "string" then
+		local parts = string.split(p.aria, ", ")
+		local second = parts[2]
+		if second and second ~= "" and not STATE_WORDS[second] then
+			role = second
+		end
+	end
+	local model: string? = nil
+	local effort: string? = nil
+	local text = roleText(node, "omp.tray.model")
+	if text then
+		local id_, level = string.match(text, "^(.-)%s*·%s*(%a+)$")
+		if id_ and LEVELS[string.lower(level :: string)] then
+			model = word(id_)
+			effort = string.lower(level :: string)
+		else
+			model = text
+		end
+	end
+	return {
+		id = id,
+		name = name,
+		status = STATUS[p.status] or "pending",
+		depth = #levels,
+		parent = parent,
+		model = model,
+		role = role,
+		effort = effort,
+		intent = roleText(node, "omp.tray.call"),
+		waiting = p.waiting == true,
+	}
+end
+
+-- Every subagent card under `node`, in tray order; `tray` notes that the tray was found.
+local function collect(node: any, out: { Subagent }, seen: { tray: boolean, more: boolean })
+	if type(node) ~= "table" then
+		return
+	end
+	if (tonumber(node.more) or 0) > 0 then
+		seen.more = true
+	end
+	local p = node.p
+	if type(p) == "table" then
+		if p.role == "omp.tray" then
+			seen.tray = true
+		elseif p.role == "omp.tray.card" then
+			seen.tray = true
+			local sub = card(node)
+			if sub then
+				table.insert(out, sub)
+			end
+			return
+		end
+	end
+	if type(node.c) == "table" then
+		for _, child in node.c do
+			collect(child, out, seen)
+		end
+	end
+end
+
+--- The subagents in `tree`, a read of an agent's dock, in tree order: each subagent before the ones it runs, siblings
+--- in tray order. Nil when the read holds no tray (no TSP surface, or Tern's agents tray is off).
+function subagents.fromTray(tree: any): Subagents?
+	if type(tree) ~= "table" then
+		return nil
+	end
+	local found: { Subagent } = {}
+	local seen = { tray = false, more = (tonumber(tree.more) or 0) > 0 }
+	for _, region in REGIONS do
+		collect(tree[region], found, seen)
+	end
+	if not seen.tray then
+		return nil
+	end
+	-- Tree order: sort by the tray position of each level's id (an ancestor missing from the tray takes its child's).
+	local position: { [string]: number } = {}
+	for i, sub in found do
+		position[sub.id] = i
+	end
+	local function path(sub: Subagent): { number }
+		local out: { number } = {}
+		local levels = string.split(sub.id, ".")
+		for i = 1, #levels do
+			local prefix = table.concat(levels, ".", 1, i)
+			table.insert(out, position[prefix] or position[sub.id])
+		end
+		return out
+	end
+	local paths: { [Subagent]: { number } } = {}
+	for _, sub in found do
+		paths[sub] = path(sub)
+	end
+	table.sort(found, function(a, b)
+		local x, y = paths[a], paths[b]
+		for i = 1, math.min(#x, #y) do
+			if x[i] ~= y[i] then
+				return x[i] < y[i]
+			end
+		end
+		return #x < #y
+	end)
+	return { agents = found, incomplete = seen.more }
+end
+
+--- Whether any of `subs` runs.
+function subagents.anyRunning(subs: Subagents?): boolean
+	if subs == nil then
+		return false
+	end
+	for _, sub in subs.agents do
+		if sub.status == "running" or sub.status == "pending" then
+			return true
+		end
+	end
+	return false
+end
+
+--- The subagent with omp id `id` among `subs`; nil when none has it.
 function subagents.find(subs: Subagents?, id: string): Subagent?
 	if subs == nil then
 		return nil
@@ -221,35 +261,7 @@ function subagents.find(subs: Subagents?, id: string): Subagent?
 	return nil
 end
 
---- The subagents of all the running `task` calls of one agent, in the order of the calls; nil when none runs.
-function subagents.merge(reads: { Subagents }): Subagents?
-	if #reads == 0 then
-		return nil
-	end
-	local out: Subagents = { agents = {}, incomplete = false }
-	for _, read in reads do
-		for _, agent in read.agents do
-			table.insert(out.agents, agent)
-		end
-		out.incomplete = out.incomplete or read.incomplete
-	end
-	return out
-end
-
---- How many of the subagents in `reads` run, at every level.
-function subagents.runningCount(reads: { Subagents }): number
-	local n = 0
-	for _, read in reads do
-		for _, agent in read.agents do
-			if agent.status == "running" then
-				n = n + 1
-			end
-		end
-	end
-	return n
-end
-
---- The working agent to read on this tick: the lowest pane after `last`, wrapping round; nil when none works.
+--- The agent to read on this tick: the lowest pane after `last`, wrapping round; nil when none is polled.
 function subagents.nextPane(working: { number }, last: number?): number?
 	local first: number? = nil
 	local after: number? = nil
@@ -283,8 +295,8 @@ function subagents.same(a: Subagents?, b: Subagents?): boolean
 			or x.model ~= y.model
 			or x.role ~= y.role
 			or x.effort ~= y.effort
-			or x.tool ~= y.tool
 			or x.intent ~= y.intent
+			or x.waiting ~= y.waiting
 		then
 			return false
 		end

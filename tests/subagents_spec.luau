@@ -4,217 +4,187 @@ local subagents = require("../lib/subagents")
 local viewModel = require("../lib/view_model")
 local visible = require("./visible")
 
--- Fixture trees shaped like the live `cx.session:surface()` reads (2026-11-09): `task` tool nodes are children of
--- `main`; each holds a context text and one `agent` node per subagent; an agent node holds its assignment and, when
--- it runs a `task` call of its own, the nested agent nodes.
-local function agent(id: string, status: string, extra: { [string]: any }?, children: { any }?): any
-	local p: { [string]: any } = { name = id, status = status }
+-- Fixture trees shaped like a live `cx.session:surface(pane, {root = "dock"})` read (2026-11-27): the dock node under
+-- `main`, holding omp's tray (`omp.tray`), one card (`omp.tray.card`) per subagent at every level, each with its
+-- name, its model with the thinking level and what it does now as child text nodes.
+local function card(ref: string, status: string, extra: { [string]: any }?): any
+	local p: { [string]: any } = { role = "omp.tray.card", item = "agent", ref = ref, status = status }
+	local model: string? = nil
+	local call: string? = nil
 	for k, v in (extra or {}) :: { [string]: any } do
-		p[k] = v
+		if k == "model" then
+			model = v
+		elseif k == "call" then
+			call = v
+		else
+			p[k] = v
+		end
 	end
-	local c: { any } = { { id = id .. ".a", k = "md", p = { text = "assignment" } } }
-	for _, child in (children or {}) :: { any } do
-		table.insert(c, child)
+	local c: { any } = { { id = ref .. "/name", k = "text", p = { role = "omp.tray.name", text = ref } } }
+	if call then
+		table.insert(c, { id = ref .. "/call", k = "text", p = { role = "omp.tray.call", text = call } })
 	end
-	return { id = "dx." .. id, k = "agent", p = p, c = c }
-end
-
-local function task(id: string, status: string, agents: { any }): any
-	local c: { any } = { { id = id .. ".ctx", k = "text", p = { text = "context" } } }
-	for _, a in agents do
-		table.insert(c, a)
+	if model then
+		table.insert(c, { id = ref .. "/model", k = "text", p = { role = "omp.tray.model", text = model } })
 	end
-	return { id = id, k = "tool", p = { name = "task", status = status }, c = c }
+	return { id = "tray/" .. ref, k = "col", p = p, c = c }
 end
 
-local function chat(children: { any }): any
-	return { surface = { id = "s", mode = "flow" }, main = { id = "m", k = "col", c = children } }
+local function dock(cards: { any }): any
+	local tray = { id = "tray", k = "col", p = { role = "omp.tray" }, c = cards }
+	return { surface = { id = "s", mode = "flow" }, main = { id = "dock", k = "col", c = { tray } } }
 end
 
-t.test("every running task call is found among finished ones and other tools, in tree order", function()
-	local tree = chat({
-		task("5h", "done", {}),
-		task("ab", "running", {}),
-		{ id = "b1", k = "tool", p = { name = "bash", status = "running" } },
-		task("dx", "running", {}),
-	})
-	t.eq(subagents.runningTasks(tree), { "ab", "dx" })
-end)
-
-t.test("a chat without a running task call has no task to read", function()
-	t.eq(subagents.runningTasks(chat({ task("5h", "done", {}) })), {})
-	t.eq(subagents.runningTasks("not a tree"), {})
-end)
-
--- A read with `root` set to the task node: `main` is that node, and Tern leaves out the top-level `more`.
-local function scoped(node: any): any
-	return { surface = { id = "s", mode = "flow" }, main = node }
+local function summary(subs: any): { string }
+	local out = {}
+	for _, a in subs.agents do
+		table.insert(out, a.name .. "|" .. a.status .. "@" .. a.depth .. " under " .. tostring(a.parent))
+	end
+	return out
 end
 
-t.test("a tool node whose props are null does not hide the running task calls beside it", function()
-	local tree = chat({ { id = "n", k = "tool", p = newproxy() }, task("dx", "running", {}) })
-	t.eq(subagents.runningTasks(tree), { "dx" })
-end)
-
-t.test("a scoped read shows each running subagent with its model, current tool and intent, and the done ones folded", function()
-	local null = newproxy()
-	local tree = scoped(task("dx", "running", {
-		agent("Ticket03", "running", { model = "anthropic/claude-opus-5-5", tool = null }),
-		agent("Ticket07", "running", {
-			model = "openai/gpt-5.1",
-			tool = { name = "bash", intent = { { t = "Running " }, { t = "probe", s = "accent" } }, age = 300 },
+t.test("the live tray card gives the subagent's id, type, model, effort and what it does", function()
+	local subs = subagents.fromTray(dock({
+		card("ProbeParent.FnLister", "done", {
+			aria = "ProbeParent.FnLister, scout, done, Read view_model..., 6 tools",
+			model = "claude-sonnet-5-5 · medium",
+			call = "Read view_model...",
 		}),
-		agent("Scout", "done", { tool = { name = "read", intent = "Reading spec" } }),
+	})) :: any
+	t.eq(subs.incomplete, false)
+	local a = subs.agents[1]
+	t.eq({ a.id, a.name, a.status, a.depth, a.parent, a.role, a.model, a.effort, a.intent, a.waiting } :: { any }, {
+		"ProbeParent.FnLister",
+		"ProbeParent>FnLister",
+		"done",
+		2,
+		"ProbeParent",
+		"scout",
+		"claude-sonnet-5-5",
+		"medium",
+		"Read view_model...",
+		false,
+	} :: { any })
+end)
+
+t.test("nested cards sort into tree order from their dotted ids, each before its own subagents", function()
+	local subs = subagents.fromTray(dock({
+		card("Lead.Helper.Deep", "running"),
+		card("Lead", "running", { waiting = true }),
+		card("Other", "running"),
+		card("Lead.Helper", "running"),
 	}))
-	local view = viewModel.build({
-		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
-		now = 0,
-		subagents = { [7] = subagents.extract(tree) :: any },
-	}).view
-	t.eq(visible.agentRows(view), {
-		"●(Working) Lead",
-		"●(Running) Ticket03",
-		"●(Running) Ticket07",
-		":check 1 subagent done",
+	t.eq(summary(subs), {
+		"Lead|running@1 under nil",
+		"Lead>Helper|running@2 under Lead",
+		"Lead>Helper>Deep|running@3 under Lead>Helper",
+		"Other|running@1 under nil",
 	})
-	t.eq(visible.hover(view, "Ticket03"), "Ticket03 · Running\nModel anthropic/claude-opus-5-5")
-	t.eq(visible.hover(view, "Ticket07"), "Ticket07 · Running\nModel openai/gpt-5.1\nTool bash\nIntent Running probe")
+	t.eq(((subs :: any).agents[1]).waiting, true)
 end)
 
-t.test("a running subagent's own completion estimate shows as its progress; the model drops omp's level suffix", function()
-	local tree = scoped(task("dx", "running", {
-		agent("Ticket03", "running", { model = "anthropic/claude-opus-5-5:high", stats = { done = 0.426, tools = 3 } }),
-		agent("Ticket07", "running", { stats = { tools = 1 } }),
+t.test("statuses map to the sidebar's: queued is pending, stopped is aborted", function()
+	local subs = subagents.fromTray(dock({
+		card("A", "queued"),
+		card("B", "stopped"),
+		card("C", "failed"),
+		card("D", "weird"),
 	}))
-	local subs = subagents.extract(tree) :: any
-	t.eq(subs.agents[1].done, 0.426)
-	t.eq(subs.agents[2].done, nil)
+	t.eq(summary(subs), {
+		"A|pending@1 under nil",
+		"B|aborted@1 under nil",
+		"C|failed@1 under nil",
+		"D|pending@1 under nil",
+	})
+end)
+
+t.test("an agent revived after a done sibling shows as running", function()
+	local subs = subagents.fromTray(dock({ card("Copy", "done"), card("Scan", "running") }))
+	t.eq(summary(subs), { "Copy|done@1 under nil", "Scan|running@1 under nil" })
+	t.eq(subagents.anyRunning(subs), true)
 	local view = viewModel.build({
-		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
+		agents = { { pane = 7, state = "idle", cwd = "/repo", title = "Lead" } },
 		now = 0,
-		subagents = { [7] = subs },
+		subagents = { [7] = subs :: any },
 	}).view
-	t.eq(visible.hover(view, "Ticket03"), "Ticket03 · Running\nModel anthropic/claude-opus-5-5\nProgress 43%")
+	t.eq(visible.agentRows(view), { "●(Idle) Lead", "●(Running) Scan", ":check 1 subagent done" })
 end)
 
-t.test("a subagent's type and thinking level come from its agent and thinking props", function()
-	local tree = scoped(task("dx", "running", {
-		agent("Scout", "running", { agent = "scout", thinking = "thinkingHigh" }),
-		agent("Max", "running", { agent = "task", thinking = "thinkingXhigh" }),
-		agent("Plain", "running", { thinking = "low" }),
-		agent("Odd", "running", { agent = "", thinking = "accent" }),
-	}))
+t.test("the main agent's helper cards and cards of other items are no subagents", function()
+	local other = card("Job1", "running")
+	other.p.item = "job"
+	local subs = subagents.fromTray(dock({ card("Main/advisor", "running"), other, card("Real", "running") }))
+	t.eq(summary(subs), { "Real|running@1 under nil" })
+end)
+
+t.test("a read without a tray gives no subagents; an empty tray gives none running", function()
+	t.eq(subagents.fromTray({ surface = { id = "s" }, main = { id = "dock", k = "col", c = {} } }), nil)
+	t.eq(subagents.fromTray(nil), nil)
+	t.eq(subagents.fromTray("not a tree"), nil)
+	local empty = subagents.fromTray(dock({}))
+	t.eq(summary(empty), {})
+	t.eq(subagents.anyRunning(empty), false)
+	t.eq(subagents.anyRunning(nil), false)
+end)
+
+t.test("a tray under `dock` instead of `main` is read too", function()
+	local tree = dock({ card("A", "running") })
+	tree.dock, tree.main = tree.main, nil
+	t.eq(summary(subagents.fromTray(tree)), { "A|running@1 under nil" })
+end)
+
+t.test("a queued subagent counts as running; finished ones do not", function()
+	t.eq(subagents.anyRunning(subagents.fromTray(dock({ card("A", "queued") }))), true)
+	t.eq(subagents.anyRunning(subagents.fromTray(dock({ card("A", "done"), card("B", "failed"), card("C", "stopped") }))), false)
+end)
+
+t.test("the type is the aria's second field unless that is a status word", function()
+	local subs = subagents.fromTray(dock({
+		card("A", "running", { aria = "A, reviewer, running, Reading" }),
+		card("B", "running", { aria = "B, running, Reading" }),
+		card("C", "running", { aria = "C, waiting" }),
+		card("D", "running"),
+	})) :: any
+	local roles = {}
+	for _, a in subs.agents do
+		table.insert(roles, a.name .. "|" .. tostring(a.role))
+	end
+	t.eq(roles, { "A|reviewer", "B|nil", "C|nil", "D|nil" })
+end)
+
+t.test("the effort is the known level after the dot; any other model text is all model", function()
+	local subs = subagents.fromTray(dock({
+		card("A", "running", { model = "claude-opus-5-5 · xhigh" }),
+		card("B", "running", { model = "gpt-5.1 · High" }),
+		card("C", "running", { model = "gpt-5.1" }),
+		card("D", "running", { model = "odd · banana" }),
+	})) :: any
 	local shown = {}
-	for _, a in (subagents.extract(tree) :: any).agents do
-		table.insert(shown, a.name .. "|" .. tostring(a.role) .. "|" .. tostring(a.effort))
+	for _, a in subs.agents do
+		table.insert(shown, a.name .. "|" .. tostring(a.model) .. "|" .. tostring(a.effort))
 	end
-	t.eq(shown, { "Scout|scout|high", "Max|task|xhigh", "Plain|nil|low", "Odd|nil|nil" })
-end)
-
-t.test("a click finds its subagent by the node id its row names, and none once the node is gone", function()
-	local subs = subagents.extract(scoped(task("dx", "running", { agent("Ticket07", "running") }))) :: any
-	t.eq((subagents.find(subs, "dx.Ticket07") :: any).name, "Ticket07")
-	t.eq(subagents.find(subs, "dx.Gone"), nil)
-end)
-
-t.test("the subagents of all running task calls of an agent show together, in tree order", function()
-	local first = subagents.extract(scoped(task("ab", "running", { agent("MergeIntoInteg", "running") })))
-	local cut = task("dx", "running", { agent("Ticket06", "running"), agent("Ticket05", "done") })
-	cut.more = 1
-	local second = subagents.extract(scoped(cut))
-	local merged = subagents.merge({ first :: any, second :: any })
-	local names = {}
-	for _, a in (merged :: any).agents do
-		table.insert(names, a.name .. "|" .. a.status)
-	end
-	t.eq(names, { "MergeIntoInteg|running", "Ticket06|running", "Ticket05|done" })
-	t.eq((merged :: any).incomplete, true)
-	t.eq(subagents.merge({}), nil, "no running task call")
-end)
-
-t.test("a subagent's own subagents sit one level deeper, in tree order", function()
-	local tree = scoped(task("dx", "running", {
-		agent("Lead", "running", nil, {
-			agent("Helper", "running", { depth = 1 }, { agent("Deep", "running", { depth = 2 }) }),
-		}),
-		agent("Other", "running"),
-	}))
-	local shown = {}
-	for _, a in (subagents.extract(tree) :: any).agents do
-		table.insert(shown, a.name .. "@" .. a.depth .. " under " .. tostring(a.parent))
-	end
-	t.eq(shown, { "Lead@1 under nil", "Helper@2 under Lead", "Deep@3 under Helper", "Other@1 under nil" })
-end)
-
-t.test("subagents at every level show in one flat list under their agent, each naming the agent it runs under", function()
-	-- Three levels as omp sends them: a nested agent node is a direct child of its parent's agent node, beside the
-	-- assignment, with `p.depth` counting from 0 at the first level.
-	local tree = scoped(task("dx", "running", {
-		agent("Merge0407", "running", { agent = "task" }, {
-			agent("Ticket04", "running", { agent = "task", depth = 1 }, {
-				agent("Probe", "running", { agent = "scout", depth = 2 }),
-				agent("Lint", "done", { depth = 2 }),
-			}),
-		}),
-		agent("Docs", "running", { agent = "task" }),
-	}))
-	local view = viewModel.build({
-		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
-		now = 0,
-		subagents = { [7] = subagents.extract(tree) :: any },
-	}).view
-	t.eq(visible.agentRows(view), {
-		"●(Working) Lead",
-		"●(Running) Merge0407 task",
-		"●(Running) Ticket04 task · in Merge0407",
-		"●(Running) Probe scout · in Ticket04",
-		"●(Running) Docs task",
-		":check 1 subagent done",
-	})
-	t.eq(visible.hover(view, "Probe"), "Probe · Running\nRole scout\nUnder Ticket04")
+	t.eq(shown, { "A|claude-opus-5-5|xhigh", "B|gpt-5.1|high", "C|gpt-5.1|nil", "D|odd · banana|nil" })
 end)
 
 t.test("a read that the node budget cut is incomplete", function()
-	local cut = task("dx", "running", { agent("Lead", "running") })
-	cut.more = 2
-	t.eq((subagents.extract(scoped(cut)) :: any).incomplete, true)
-	local whole = scoped(task("dx", "running", { agent("Lead", "running") }))
-	whole.more = 5
-	t.eq((subagents.extract(whole) :: any).incomplete, true)
-	t.eq((subagents.extract(scoped(task("dx", "running", {}))) :: any).incomplete, false)
+	local tree = dock({ card("A", "running") })
+	tree.more = 2
+	t.eq((subagents.fromTray(tree) :: any).incomplete, true)
+	local inner = dock({ card("A", "running") })
+	inner.main.c[1].more = 1
+	t.eq((subagents.fromTray(inner) :: any).incomplete, true)
 end)
 
-t.test("a scoped read whose task call has ended gives no subagents", function()
-	t.eq(subagents.extract(scoped(task("dx", "done", { agent("Lead", "done") }))), nil)
-	t.eq(subagents.extract(scoped({ id = "dx", k = "text", p = { text = "reused id" } })), nil)
-	t.eq(subagents.extract(nil), nil)
-end)
-
-t.test("an agent that runs again after its call ended shows alone, with its own subagents, and the ended calls are found", function()
-	local tree = chat({
-		task("5h", "done", {}),
-		task("ab", "running", {}),
-		task("mm", "error", {}),
-		task("np", "pending", {}),
-	})
-	t.eq(subagents.settledTasks(tree), { "5h", "mm" })
-	local cut = task("mm", "error", {
-		agent("PrepareCs", "aborted"),
-		agent("PreparePsc", "running", { tool = { name = "bash", intent = "Running tests" } }, {
-			agent("Lint", "running", { depth = 1 }),
-		}),
-		agent("PrepareBo", "running"),
-	})
-	cut.more = 1
-	local subs = subagents.extract(scoped(cut)) :: any
-	local shown = {}
-	for _, a in subs.agents do
-		table.insert(shown, a.name .. "|" .. a.status .. "@" .. a.depth .. " under " .. tostring(a.parent))
-	end
-	t.eq(shown, { "PreparePsc|running@1 under nil", "Lint|running@2 under PreparePsc", "PrepareBo|running@1 under nil" })
-	t.eq(subs.incomplete, true)
-	t.eq(subagents.runningCount({ subs }), 3)
-	t.eq(subagents.extract(scoped(task("mm", "error", { agent("PrepareCs", "aborted") }))), nil, "none runs again")
+t.test("a click finds its subagent by its omp id, and none once it is gone", function()
+	local subs = subagents.fromTray(dock({ card("Lead", "running"), card("Lead.Fix", "running") }))
+	t.eq((subagents.find(subs, "Lead.Fix") :: any).name, "Lead>Fix")
+	t.eq(subagents.find(subs, "Gone"), nil)
+	local view = viewModel.build({
+		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
+		now = 0,
+		subagents = { [7] = subs :: any },
+	}).view
+	t.eq(visible.click(view, "Fix"), "subagent=7 Lead.Fix")
 end)
 
 return nil

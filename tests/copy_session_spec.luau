@@ -72,8 +72,8 @@ local function withSubagents(sessionFile: string?): any
 		subagents = {
 			[7] = {
 				agents = {
-					{ id = "dx.Ticket07", name = "Ticket07", status = "running", depth = 1 },
-					{ id = "dy.Ticket07.Fix", name = "Ticket07>Fix", status = "running", depth = 2, parent = "Ticket07" },
+					{ id = "Ticket07", name = "Ticket07", status = "running", depth = 1 },
+					{ id = "Ticket07.Fix", name = "Ticket07>Fix", status = "running", depth = 2, parent = "Ticket07" },
 				},
 				incomplete = false,
 			},
@@ -88,7 +88,7 @@ t.test("a subagent's right-click menu copies its own session file, in its agent'
 		"Copy session ID → copy-id=" .. folder .. "/Ticket07.jsonl",
 		"Copy session path → copy-path=" .. folder .. "/Ticket07.jsonl",
 	})
-	t.eq(visible.menu(v, "Ticket07>Fix"), {
+	t.eq(visible.menu(v, "(Running) Fix"), {
 		"Copy session ID → copy-id=" .. folder .. "/Ticket07/Ticket07.Fix.jsonl",
 		"Copy session path → copy-path=" .. folder .. "/Ticket07/Ticket07.Fix.jsonl",
 	}, "a nested subagent's file sits in its parent's folder, named by its omp id")
@@ -96,7 +96,7 @@ end)
 
 t.test("a subagent's copy items are off while its agent's session file is unknown", function()
 	local off = " (off: omp has not reported a session file for this agent)"
-	t.eq(visible.menu(withSubagents(nil), "Ticket07>Fix"), {
+	t.eq(visible.menu(withSubagents(nil), "(Running) Fix"), {
 		"Copy session ID → copy-id" .. off,
 		"Copy session path → copy-path" .. off,
 	})

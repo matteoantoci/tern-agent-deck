@@ -196,11 +196,19 @@ function reader.reported(): { [number]: string }
 	return reported
 end
 
---- The main agent's model of the session in `file` as omp's session file names it (`provider/model`); nil when the
---- file was not read yet or names none.
+--- The model of the session in `file` as omp's session file names it (`provider/model`); nil when the file was not
+--- read yet or names none.
 function reader.model(file: string): string?
 	return models[file]
 end
+
+--- The model of every session file read, by file: the main agents' and the watched subagents'.
+function reader.models(): { [string]: string }
+	return models
+end
+
+-- The subagent session files whose models are read with the reported ones (`reader.watch`).
+local watched: { [string]: boolean } = {}
 
 -- `$@` the session files. For each file, in file order: `<path>\tC\t<entry>` for each `model_change` entry, and
 -- `<path>\tA\t<provider>/<model>` for each assistant message (the model that served the turn). A JSON string value
@@ -212,12 +220,18 @@ t=$(printf '\t')
 	-e "s/^(.*\.jsonl):\{\"type\":\"message\".*\"message\":\{\"role\":\"assistant\".*\"provider\":\"([^\"]*)\",\"model\":\"([^\"]*)\".*\$/\1${t}A${t}\2\/\3/p"
 ]]
 
--- Reads the model of each reported session file, off the UI thread, with one `grep` and `sed` over every file.
--- `changed` runs, with a fresh `cx`, when the answer differs from the last one.
+-- Reads the model of each reported session file and each watched one, off the UI thread, with one `grep` and `sed`
+-- over every file. `changed` runs, with a fresh `cx`, when the answer differs from the last one.
 local function readModels(files: { [number]: string }, changed: (cx: WindowCx) -> ())
 	local argv = { "/bin/sh", "-c", MODELS, "sh" }
 	local seen: { [string]: boolean } = {}
 	for _, file in files do
+		if not seen[file] then
+			seen[file] = true
+			table.insert(argv, file)
+		end
+	end
+	for file in watched do
 		if not seen[file] then
 			seen[file] = true
 			table.insert(argv, file)
@@ -246,6 +260,23 @@ local function readModels(files: { [number]: string }, changed: (cx: WindowCx) -
 	end)
 	if not ok then
 		print("agents: the session model read did not start: " .. tostring(err))
+	end
+end
+
+--- Reads, with the reported session files, the models of the subagent session files `files` (the subagents that
+--- show now); reads at once when one of them is new. `changed` runs, with a fresh `cx`, when the models changed.
+function reader.watch(files: { string }, changed: (cx: WindowCx) -> ())
+	local now: { [string]: boolean } = {}
+	local fresh = false
+	for _, file in files do
+		now[file] = true
+		if not watched[file] then
+			fresh = true
+		end
+	end
+	watched = now
+	if fresh then
+		readModels(reported, changed)
 	end
 end
 

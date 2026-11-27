@@ -4,7 +4,7 @@ local visible = require("./visible")
 local viewModel = require("../lib/view_model")
 
 local function sub(name: string, status: string, depth: number?, extra: { [string]: any }?): { [string]: any }
-	local s: { [string]: any } = { id = "dx." .. name, name = name, status = status, depth = depth or 1 }
+	local s: { [string]: any } = { id = (string.gsub(name, ">", ".")), name = name, status = status, depth = depth or 1 }
 	for k, v in (extra or {}) :: { [string]: any } do
 		s[k] = v
 	end
@@ -26,7 +26,7 @@ end
 t.test("a subagent row shows the dot, the name and its role, with no model chip, no tool text and no end mark", function()
 	t.eq(visible.agentRows(view("working", {
 		sub("Ticket03", "running", 1, { model = "anthropic/claude-opus-5-5", role = "task" }),
-		sub("Ticket07", "running", 1, { tool = "bash", intent = "Running probe", model = "GPT-5.1", role = "scout" }),
+		sub("Ticket07", "running", 1, { intent = "Running probe", model = "GPT-5.1", role = "scout" }),
 		sub("Bare", "running", 1),
 	})), {
 		"●(Working) Lead",
@@ -36,12 +36,11 @@ t.test("a subagent row shows the dot, the name and its role, with no model chip,
 	})
 end)
 
-t.test("a subagent row's hover card shows its role, model, effort, current tool and intent, and the row has no tooltip", function()
+t.test("a subagent row's hover card shows its role, model, effort and what it does, and the row has no tooltip", function()
 	local out = view("working", {
 		sub("Ticket07", "running", 1, {
-			tool = "bash",
 			intent = "Running probe",
-			model = "anthropic/claude-opus-5-5",
+			model = "claude-opus-5-5",
 			role = "scout",
 			effort = "high",
 		}),
@@ -49,11 +48,35 @@ t.test("a subagent row's hover card shows its role, model, effort, current tool 
 	})
 	t.eq(
 		visible.hover(out, "Ticket07"),
-		"Ticket07 · Running\nRole scout\nModel anthropic/claude-opus-5-5\nEffort high\nTool bash\nIntent Running probe"
+		"Ticket07 · Running\nRole scout\nModel claude-opus-5-5\nEffort high\nDoing Running probe"
 	)
 	t.eq(visible.titles(out, "Ticket07"), {})
 	t.eq(visible.hover(out, "Quiet"), "Quiet · Running")
 	t.eq(visible.titles(out, "Quiet"), {})
+end)
+
+t.test("a subagent's model comes from its session file's route when known, else from the tray's model id", function()
+	local out = viewModel.build({
+		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0, sessionFile = "/s/main.jsonl" } },
+		now = 0,
+		subagents = {
+			[7] = {
+				agents = {
+					{ id = "Lead", name = "Lead", status = "running", depth = 1, model = "claude-opus-5-5" },
+					{ id = "Lead.Fix", name = "Lead>Fix", status = "running", depth = 2, parent = "Lead", model = "gpt-5.1" },
+				},
+				incomplete = false,
+			},
+		},
+		routes = { ["/s/main/Lead.jsonl"] = "anthropic/claude-opus-5-5" },
+	}).view
+	t.eq(visible.hover(out, "(Running) Lead"), "Lead · Running\nModel anthropic/claude-opus-5-5")
+	t.eq(visible.hover(out, "(Running) Fix"), "Fix · Running\nUnder Lead\nModel gpt-5.1")
+end)
+
+t.test("a subagent that only waits on its own subagents says so", function()
+	local out = view("working", { sub("Lead", "running", 1, { waiting = true }) })
+	t.eq(visible.hover(out, "(Waiting on its subagents) Lead"), "Lead · Waiting on its subagents")
 end)
 
 t.test("subagent names render in the sans face", function()
@@ -99,9 +122,9 @@ t.test("every level omp renders shows; a level past omp's limit folds into one +
 end)
 
 t.test("a click on a subagent row asks to show that subagent in omp's view, at every level", function()
-	local out = view("working", { sub("Ticket07", "running"), sub("Deep", "running", 3, { parent = "Mid" }) })
-	t.eq(visible.click(out, "Ticket07"), "subagent=7 dx.Ticket07")
-	t.eq(visible.click(out, "Deep"), "subagent=7 dx.Deep")
+	local out = view("working", { sub("Ticket07", "running"), sub("Top>Mid>Deep", "running", 3, { parent = "Top>Mid" }) })
+	t.eq(visible.click(out, "Ticket07"), "subagent=7 Ticket07")
+	t.eq(visible.click(out, "Deep"), "subagent=7 Top.Mid.Deep")
 end)
 
 t.test("finished subagents at every level fold into one line that counts each result; pending ones show nothing yet", function()
@@ -167,7 +190,7 @@ t.test("a working agent in a repo group shows its subagent rows inside that grou
 		},
 		now = 0,
 		home = "/Users/me",
-		subagents = { [7] = { agents = { sub("Ticket07", "running", 1, { tool = "bash" }), sub("A", "done") }, incomplete = false } },
+		subagents = { [7] = { agents = { sub("Ticket07", "running", 1), sub("A", "done") }, incomplete = false } },
 	}).view
 	t.eq(visible.rows(out), {
 		":chev :mi-folder-open alpha 1 [:plus](New tab in this repo)",
@@ -179,7 +202,7 @@ t.test("a working agent in a repo group shows its subagent rows inside that grou
 		":chev :mi-folder-open tmp 1 [:plus](New tab in this folder)",
 		"●(Idle) Notes",
 	})
-	t.eq(visible.click(out, "Ticket07"), "subagent=7 dx.Ticket07")
+	t.eq(visible.click(out, "Ticket07"), "subagent=7 Ticket07")
 end)
 
 return nil

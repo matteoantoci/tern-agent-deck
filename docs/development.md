@@ -52,19 +52,18 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   the answer needs shortening) writes a short summary for its hover card. A working agent's message is summarized
   once it stayed the same 15 s; until a new summary arrives, the card shows the pane's summary before. The
   summaries live in `tern.kv`, shared by every window; one run at a time.
-- `lib/subagent_reader.luau`: the subagent reader. On each tick it reads the TSP surface of one working agent, in
-  rotation: a find read lists the running `task` tool nodes (again once 5 s passed since that agent's last find read,
-  or when a call ended), the reads in between set `root` to each of them. While omp's HUD counts more running
-  subagents than the running calls hold, the find read also reads the ended calls: an agent that runs again after
-  its call ended (an IRC message revived or woke it, or it kept running after a cancel) shows as running in that
-  call's card. omp draws it so from the build that carries the revived-agent card fix; an older omp keeps the card's
-  final status, and the agent does not show.
-- `lib/subagents.luau`: pure helpers for the reader: find the running and the ended `task` nodes and turn their
-  `agent` nodes, at every nesting level, into subagents (node id, name, state, depth, parent, type, effort, model,
-  tool, the completion estimate `stats.done`); from an ended call, only the agents that run again. It uses no
-  `if … then … else` expression, so a Carly probe can `loadstring` it.
-- `lib/hud.luau`: the pure reader of omp's HUD agents counter in a read of the dock (`…running/agents`): whether the
-  session has running subagents, so that the reader polls an idle agent again after a plugin reload.
+- `lib/subagent_reader.luau`: the subagent reader. On each tick it reads the dock of one polled agent (working, or
+  idle with a running subagent), in rotation, with one read scoped to the dock: the subagents come from omp's tray
+  there, and the read also tells which subagent omp shows. An unpolled live agent has its dock checked every 5 s, one
+  a tick, so that an idle agent whose subagents still run is found, also after a plugin reload. While omp shows a
+  subagent and the read has no tray, the last rows stay, frozen.
+- `lib/subagents.luau`: pure helpers for the reader: turn the tray's agent cards (`omp.tray.card`, `item = "agent"`)
+  into subagents. omp lists every subagent of its registry there, at every nesting level, so an agent that runs
+  again after its `task` call ended (a message revived or woke it) shows as running. The card's omp id (`Anna.Bob`)
+  gives the depth and the parent; the card gives the state, `waiting`, the type (from `aria`), the model id with the
+  effort (`omp.tray.model`) and what it does now (`omp.tray.call`). It uses no `if … then … else` expression, so a
+  Carly probe can `loadstring` it. The tray shows while Tern's "agents tray" setting is on (the default); with it
+  off, omp draws no tray and the sidebar shows no subagents.
 - `lib/effort_reader.luau`: the effort reader. On `agent_state`, `agent_finished` and at start (never on the tick) it
   reads the effort glyph of an omp agent's composer with one read scoped to that node (the first read is scoped to
   the dock), and keeps the level of each pane.

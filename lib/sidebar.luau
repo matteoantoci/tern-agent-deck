@@ -161,13 +161,28 @@ local function snapshot(cx: WindowCx): viewModel.Input
 		end
 		summaries.keep(live)
 	end
+	-- The subagents' own session files: their models are read with the main agents' (`provider/model`).
+	local subs = subagentReader.subagents()
+	local files: { string } = {}
+	for pane, list in subs do
+		for _, sub in list.agents do
+			local file = viewModel.subagentFile(reported[pane], sub.name)
+			if file and sub.status == "running" then
+				table.insert(files, file)
+			end
+		end
+	end
+	sessionReader.watch(files, function(later: WindowCx)
+		sidebar.refresh(later)
+	end)
 	return store.fill({
 		agents = agents,
 		now = now,
 		home = home(),
-		subagents = subagentReader.subagents(),
+		subagents = subs,
 		viewing = subagentReader.viewing(),
 		sessions = sessionReader.sessions(),
+		routes = sessionReader.models(),
 		focused = focusedPane(cx),
 		plugin = tern.plugin.id,
 	})

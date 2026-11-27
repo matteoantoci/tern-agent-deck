@@ -1,35 +1,39 @@
 --!strict
 -- The subagent reader against a fake window: omp runs `task` subagents in the background, so its agent can end its
--- turn and go idle while they work.
+-- turn and go idle while they work. The reader reads them from omp's tray in the pane's dock.
 local t = require("./harness")
 
 local clock = 0
 
 local reader = require("../lib/subagent_reader")
 
-local function agentNode(name: string, status: string): any
-	return { id = "dx." .. name, k = "agent", p = { name = name, status = status }, c = {} }
+local function card(ref: string, status: string): any
+	return { id = "tray/" .. ref, k = "col", p = { role = "omp.tray.card", item = "agent", ref = ref, status = status } }
 end
 
-local function taskNode(status: string, agents: { any }): any
-	return { id = "5mt", k = "tool", p = { name = "task", status = status }, c = agents }
-end
-
--- omp's HUD agents counter as the dock holds it (`agentsSegment` in omp's `interactive-mode.ts`): with a `count`
--- node while `running` > 0.
-local function counter(running: number): any
-	local label = if running > 0 then running .. (if running == 1 then " agent" else " agents") .. " running"
-		else "No agents running · 2 in this session"
-	local c: { any } = { { id = "6.running/agents/icon", k = "icon", p = { name = "agent" } } }
-	if running > 0 then
-		table.insert(c, { id = "6.running/agents/count", k = "text", p = {} })
+-- A dock read holding a tray with `cards`; no tray when `cards` is nil. `shown` adds omp's viewing header.
+local function dockRead(cards: { any }?, shown: string?): any
+	local c: { any } = {}
+	if shown then
+		table.insert(c, {
+			id = "3.focus",
+			k = "row",
+			p = { role = "omp.composer.focus" },
+			c = {
+				{ id = "3.focus/agent", k = "text", p = { role = "omp.composer.agent", text = shown } } :: any,
+				{ id = "3.focus/exit", k = "row", p = { actions = { click = "focus:Main" } } },
+			},
+		})
 	end
-	return { id = "6.running/agents", k = "row", p = { aria = label, actions = { click = "agents.open" } }, c = c }
+	if cards then
+		table.insert(c, { id = "tray", k = "col", p = { role = "omp.tray" }, c = cards })
+	end
+	return { surface = { id = "s" }, main = { id = "dock", k = "col", c = c } }
 end
 
--- A window with one omp agent in pane 7, in `state`, whose chat holds `task`, and whose dock holds `hud`.
-local function window(state: string, task: any, hud: any?): any
-	local cx: any = {}
+-- A window with one omp agent in pane 7, in `state`, whose dock holds a tray with `cards`; counts the dock reads.
+local function window(state: string, cards: { any }?, shown: string?): any
+	local cx: any = { reads = 0 }
 	cx.agents = {
 		list = function(_self: any)
 			return { { pane = 7, state = state } }
@@ -37,14 +41,13 @@ local function window(state: string, task: any, hud: any?): any
 	}
 	cx.session = {
 		surface = function(_self: any, _pane: number, opts: any)
-			if opts.root == "dock" then
-				return { surface = { id = "s" }, dock = { id = "d", k = "col", c = { hud } } } :: any
-			elseif opts.root then
-				return { surface = { id = "s" }, main = task }
-			end
-			return { surface = { id = "s" }, main = { id = "m", k = "col", c = { task } } }
+			assert(opts.root == "dock", "only the dock is read")
+			cx.reads += 1
+			return dockRead(cx.cards, cx.shown)
 		end,
 	}
+	cx.cards = cards
+	cx.shown = shown
 	return cx
 end
 
@@ -63,72 +66,83 @@ local function step(cx: any, after: number?): boolean
 	return polling
 end
 
-t.test("an agent that goes idle while its task runs keeps its subagent rows, and the reader keeps polling", function()
-	t.eq(step(window("working", taskNode("running", { agentNode("Copy", "running") }))), true)
+-- Leaves the reader with no polled or checked pane.
+local function reset()
+	step(window("exited"))
+end
+
+t.test("an agent that goes idle while its subagent runs keeps its subagent rows, and the reader keeps polling", function()
+	reset()
+	t.eq(step(window("working", { card("Copy", "running") })), true)
 	t.eq(names(), { "Copy running" })
-	t.eq(step(window("idle", taskNode("running", { agentNode("Copy", "running") }))), true)
+	t.eq(step(window("idle", { card("Copy", "running") })), true)
 	t.eq(names(), { "Copy running" })
+	reset()
 end)
 
-t.test("a task that ends while its agent is idle drops the rows, and the reader stops polling", function()
-	t.eq(step(window("idle", taskNode("running", { agentNode("Copy", "done"), agentNode("Scan", "running") }))), true)
+t.test("a queued subagent keeps an idle agent polled", function()
+	reset()
+	step(window("working", { card("Copy", "queued") }))
+	t.eq(step(window("idle", { card("Copy", "queued") })), true)
+	t.eq(names(), { "Copy pending" })
+	reset()
+end)
+
+t.test("once nothing runs, an idle agent drops its rows and the reader stops polling", function()
+	reset()
+	step(window("working", { card("Copy", "done"), card("Scan", "running") }))
 	t.eq(names(), { "Copy done", "Scan running" })
-	t.eq(step(window("idle", taskNode("done", { agentNode("Copy", "done"), agentNode("Scan", "done") }))), false)
+	local cx = window("idle", { card("Copy", "done"), card("Scan", "done") })
+	step(cx)
 	t.eq(names(), {})
+	t.eq(step(cx, 1), false, "checked once, then left alone")
+	reset()
 end)
 
-t.test("an idle agent with no subagents is not polled", function()
-	t.eq(step(window("idle", taskNode("running", { agentNode("Copy", "running") }))), false)
+t.test("a working agent shows no rows for finished subagents of earlier turns while none runs", function()
+	reset()
+	step(window("working", { card("Copy", "done"), card("Scan", "failed") }))
 	t.eq(names(), {})
+	reset()
 end)
 
 t.test("an agent that exits drops its subagent rows", function()
-	step(window("working", taskNode("running", { agentNode("Copy", "running") })))
-	t.eq(step(window("exited", taskNode("running", { agentNode("Copy", "running") }))), false)
+	reset()
+	step(window("working", { card("Copy", "running") }))
+	t.eq(step(window("exited", { card("Copy", "running") })), false)
 	t.eq(names(), {})
 end)
 
-t.test("after a reload, an idle agent whose HUD counts a running subagent gets its rows back", function()
-	local cx = window("idle", taskNode("running", { agentNode("Copy", "running") }), counter(1))
-	t.eq(names(), {})
-	t.eq(step(cx), true)
-	t.eq(step(cx), true)
-	t.eq(names(), { "Copy running" })
-end)
-
-t.test("an idle agent stays polled while its HUD counts running subagents", function()
-	local cx = window("idle", taskNode("done", {}), counter(1))
-	t.eq(step(cx), true)
-	t.eq(step(cx), true)
-	t.eq(names(), {})
-	t.eq(step(window("idle", taskNode("done", {}), counter(0))), false)
-end)
-
-t.test("an unpolled idle agent is checked again only after the interval", function()
-	local checks = 0
-	local count = 0
-	local cx = window("idle", taskNode("running", { agentNode("Copy", "running") }), counter(0))
-	local surface = cx.session.surface
-	cx.session.surface = function(self: any, pane: number, opts: any)
-		if opts.root == "dock" then
-			checks += 1
-			if count > 0 then
-				return { surface = { id = "s" }, dock = { id = "d", k = "col", c = { counter(count) } } }
-			end
-		end
-		return surface(self, pane, opts)
-	end
+t.test("an unpolled idle agent is found by its dock check, which runs again only after the interval", function()
+	reset()
+	local cx = window("idle", { card("Copy", "done") })
 	step(cx, 5000)
-	t.eq(checks, 1)
-	count = 1
+	t.eq(cx.reads, 1)
+	t.eq(names(), {})
+	cx.cards = { card("Copy", "done"), card("Copy2", "running") }
 	step(cx, 1000)
-	t.eq(checks, 1)
+	t.eq(cx.reads, 1, "no check before the interval")
 	t.eq(names(), {})
 	step(cx, 4000)
-	t.eq(checks, 2)
+	t.eq(names(), { "Copy done", "Copy2 running" })
+	t.eq(step(cx), true, "polled from now on")
+	reset()
+end)
+
+t.test("while omp shows a subagent and the read has no tray, the last rows stay, frozen", function()
+	reset()
+	local cx = window("working", { card("Copy", "running"), card("Scan", "running") })
 	step(cx)
-	t.eq(names(), { "Copy running" })
-	t.eq(step(window("exited", taskNode("done", {}))), false)
+	cx.cards = nil
+	cx.shown = "Scan"
+	step(cx)
+	t.eq(names(), { "Copy running", "Scan running" })
+	t.eq(reader.subagents()[7].frozen, true)
+	t.eq(reader.viewing()[7], "Scan")
+	cx.shown = nil
+	step(cx)
+	t.eq(names(), {}, "no tray and no view: no rows")
+	reset()
 end)
 
 return nil
