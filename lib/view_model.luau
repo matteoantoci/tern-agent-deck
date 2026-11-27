@@ -2218,7 +2218,16 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 				table.insert(body, { k = "col", p = { key = "older-list", role = ROLE.older, gap = "none" }, c = groups })
 			end
 		end
-		local status = tostring(#idle + #older) .. (if stopped > 0 then string.format(" · %d stopped", stopped) else "")
+		-- The idle count leaves out the stopped pins, which `idle` also holds: `1 idle · 2 stopped`.
+		local counts: { string } = {}
+		local waiting = #idle + #older - stopped
+		if waiting > 0 then
+			table.insert(counts, waiting .. " idle")
+		end
+		if stopped > 0 then
+			table.insert(counts, stopped .. " stopped")
+		end
+		local status = table.concat(counts, " · ")
 		table.insert(children, zone("zone-idle", "idle", "Idle", status, body))
 	end
 	if #children == 0 then
