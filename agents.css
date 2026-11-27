@@ -56,8 +56,10 @@
 	color: var(--t2);
 }
 
-/* The reset takes only the room left after the rest of the line, so it is cut first; the tooltip keeps it whole. */
+/* The reset takes only the room left after the rest of the line, so it is cut first; the tooltip keeps it whole. Its
+   negative margin takes the 8px gap down to one space, as the ` · ` separators inside the line. */
 [data-role='agents.quota'] [data-role='agents.detail'] {
+	margin-left: -4px;
 	color: inherit;
 }
 
@@ -148,9 +150,9 @@
 
 /* A project's label: muted, with a light rule to the right edge, closer to its rows than to the group above. */
 [data-role='agents.root'] [data-role^='agents.label.'] {
+	position: relative;
 	height: 24px;
 	font-size: 12px;
-	position: relative;
 	color: var(--t3);
 }
 
@@ -168,8 +170,6 @@
 	background: var(--l1);
 }
 
-[data-role='agents.root'] [data-role='agents.rule'] > *,
-[data-role='agents.root'] [data-role='agents.rule']::before,
 /* The label's `+` floats over the right end, so the rule ends on the same right edge as the row numbers; while the
    `+` shows, the rule stops short of it. */
 [data-role='agents.root'] [data-role^='agents.label.'] > [data-role='agents.hover'] {
@@ -182,6 +182,8 @@
 	margin-right: 28px;
 }
 
+[data-role='agents.root'] [data-role='agents.rule'] > *,
+[data-role='agents.root'] [data-role='agents.rule']::before,
 [data-role='agents.root'] [data-role='agents.rule']::after {
 	display: none;
 }
