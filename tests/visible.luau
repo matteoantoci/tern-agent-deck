@@ -75,13 +75,27 @@ local function kids(n: Node): { Node }
 	return n.c or {}
 end
 
--- One part of a row as the user sees it: text as written, an icon as `:name`, a badge as its text, a live
--- timer as `⏱` and the whole seconds it shows when it arrives, a thinking-effort glyph as `◔` and its level, a
--- button as its label or icon in brackets. A node's accessible name (`aria`) or tooltip follows it in parentheses.
+-- A bar of the subagent strip (`agents.bar.<state>`): an element with no text and no children, which `agents.css`
+-- draws as a box. A bar drawn as a text glyph does not count: its place depended on the font's line metrics.
+local function isBar(n: Node): boolean
+	local role = props(n).role
+	return n.k == "el"
+		and nodeText(n) == ""
+		and #kids(n) == 0
+		and type(role) == "string"
+		and string.match(role, "^agents%.bar%.%a+$") ~= nil
+end
+
+-- One part of a row as the user sees it: text as written, an icon as `:name`, a strip bar as `▮`, a badge as its
+-- text, a live timer as `⏱` and the whole seconds it shows when it arrives, a thinking-effort glyph as `◔` and its
+-- level, a button as its label or icon in brackets. A node's accessible name (`aria`) or tooltip follows it in
+-- parentheses.
 local function part(n: Node): string?
 	local p = props(n)
 	local shown: string?
-	if n.k == "icon" then
+	if isBar(n) then
+		shown = "▮"
+	elseif n.k == "icon" then
 		shown = ":" .. tostring(p.name)
 	elseif n.k == "elapsed" then
 		shown = "⏱" .. tostring(math.floor((tonumber(p.age) or 0) / 1000)) .. "s"
@@ -520,9 +534,8 @@ end
 function visible.bars(view: Node, text: string): { string }
 	local out: { string } = {}
 	local function walk(n: Node)
-		local role = props(n).role
-		if type(role) == "string" and string.match(role, "^agents%.bar%.") then
-			table.insert(out, stateOf(role) or "?")
+		if isBar(n) then
+			table.insert(out, stateOf(props(n).role) or "?")
 		end
 		for _, child in kids(n) do
 			walk(child)
