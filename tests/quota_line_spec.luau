@@ -1,5 +1,6 @@
 --!strict
--- The quota line under the Live/Recent switch: shown only while a subscription quota is near or at its limit.
+-- The quota line under the Live/Recent switch: shown only while every account of a provider has a quota near or at its
+-- limit (omp rotates to an account with room).
 local t = require("./harness")
 local visible = require("./visible")
 local viewModel = require("../lib/view_model")
@@ -48,40 +49,74 @@ end)
 
 t.test("a quota near its limit shows one line under the switch, with a warning square", function()
 	local out = view({ quota({ used = 0.73 }), quota({ used = 0.97, status = "warning" }) })
-	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 7d 97% · resets Sun" })
-	t.eq(visible.state(out, "Claude · work · 7d 97%"), "waiting")
-	t.eq(visible.titles(out, "Claude · work · 7d 97%"), { "Claude · work · 7d 97% · resets Sun" })
+	t.eq(visible.chrome(out), { SWITCH, "■ Claude · 7d 97% · resets Sun" })
+	t.eq(visible.state(out, "Claude · 7d 97%"), "waiting")
+	t.eq(visible.titles(out, "Claude · 7d 97%"), { "Claude · 7d 97% · resets Sun" })
 end)
 
 t.test("a quota at its limit shows an error square", function()
 	local out = view({ quota({ label = "5h", used = 1.0, status = "exhausted", left = 38 * MINUTE }) })
-	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 5h 100% · resets in 38m" })
-	t.eq(visible.state(out, "Claude · work · 5h 100%"), "failed")
+	t.eq(visible.chrome(out), { SWITCH, "■ Claude · 5h 100% · resets in 38m" })
+	t.eq(visible.state(out, "Claude · 5h 100%"), "failed")
 end)
 
-t.test("the qualifier shows on the line and in the tooltip, and the reset is the part cut first", function()
+t.test("the line shows an account's worst limit, the tooltip every limit near or at its limit", function()
 	local out = view({
 		quota({ label = "7d Fable", used = 0.97, status = "warning" }),
 		quota({ label = "7d", used = 0.95, status = "warning" }),
 	})
-	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 7d Fable 97% · resets Sun +1" })
+	t.eq(visible.chrome(out), { SWITCH, "■ Claude · 7d Fable 97% · resets Sun" })
 	t.eq(visible.titles(out, "7d Fable 97%"), {
-		"Claude · work · 7d Fable 97% · resets Sun\nClaude · work · 7d 95% · resets Sun",
+		"Claude · 7d Fable 97% · resets Sun\nClaude · 7d 95% · resets Sun",
 	})
 	t.eq(visible.secondary(out, "· resets Sun"), true)
 end)
 
-t.test("the worst quota shows first, exhausted before warning and then the higher use, with +N for the others", function()
+t.test("an exhausted account shows no line while another account of its provider has room", function()
+	-- omp rotates to the account with room, so the user can still work.
+	local out = view({
+		quota({ account = "a", label = "5h", used = 1.0, status = "exhausted", left = 38 * MINUTE }),
+		quota({ account = "b", label = "5h", used = 0.19, left = 2 * HOUR }),
+		quota({ account = "b", label = "7d", used = 0.04 }),
+	})
+	t.eq(visible.chrome(out), { SWITCH })
+end)
+
+t.test("when every account of a provider is at risk, the line shows the account with the most room", function()
+	local out = view({
+		quota({ account = "a", label = "5h", used = 1.0, status = "exhausted", left = 38 * MINUTE }),
+		quota({ account = "b", label = "5h", used = 0.97, status = "warning", left = 2 * HOUR }),
+		quota({ account = "b", label = "7d", used = 0.04 }),
+	})
+	t.eq(visible.chrome(out), { SWITCH, "■ Claude · b · 5h 97% · resets in 2h" })
+	t.eq(visible.state(out, "Claude · b · 5h 97%"), "waiting")
+	t.eq(visible.titles(out, "Claude · b · 5h 97%"), {
+		"Claude · a · 5h 100% · resets in 38m\nClaude · b · 5h 97% · resets in 2h",
+	})
+end)
+
+t.test("the line shows the worst at-risk provider first, with +N for the other at-risk providers", function()
 	local out = view({
 		quota({ account = "home", used = 0.91, status = "warning", left = 3 * HOUR }),
 		quota({ used = 0.4 }),
 		quota({ provider = "Grok", account = "me", label = "Weekly", used = 0.98, status = "warning", left = SUNDAY - NOW + 4 * DAY }),
 		quota({ label = "5h", used = 1.0, status = "exhausted", left = 38 * MINUTE }),
 	})
-	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 5h 100% · resets in 38m +2" })
-	t.eq(visible.state(out, "Claude · work · 5h 100%"), "failed")
-	t.eq(visible.titles(out, "Claude · work · 5h 100%"), {
-		"Claude · work · 5h 100% · resets in 38m\nGrok · me · Weekly 98% · resets Thu\nClaude · home · 7d 91% · resets in 3h",
+	t.eq(visible.chrome(out), { SWITCH, "■ Grok · Weekly 98% · resets Thu +1" })
+	t.eq(visible.titles(out, "Grok · Weekly 98%"), {
+		"Grok · Weekly 98% · resets Thu\nClaude · work · 5h 100% · resets in 38m\nClaude · home · 7d 91% · resets in 3h",
+	})
+end)
+
+t.test("the tooltip also lists the limits of a provider that is not at risk", function()
+	local out = view({
+		quota({ account = "a", label = "5h", used = 1.0, status = "exhausted", left = 38 * MINUTE }),
+		quota({ account = "b", label = "5h", used = 0.19, left = 2 * HOUR }),
+		quota({ provider = "Grok", account = "me", label = "Weekly", used = 0.95, status = "warning" }),
+	})
+	t.eq(visible.chrome(out), { SWITCH, "■ Grok · Weekly 95% · resets Sun" })
+	t.eq(visible.titles(out, "Grok · Weekly 95%"), {
+		"Grok · Weekly 95% · resets Sun\nClaude · a · 5h 100% · resets in 38m",
 	})
 end)
 
@@ -89,9 +124,9 @@ t.test("the reset reads as a weekday when more than a day away, else as the time
 	local function line(left: number): string
 		return visible.chrome(view({ quota({ used = 0.95, status = "warning", left = left }) }))[2]
 	end
-	t.eq(line(SUNDAY - NOW), "■ Claude · work · 7d 95% · resets Sun")
-	t.eq(line(23 * HOUR + 59 * MINUTE), "■ Claude · work · 7d 95% · resets in 23h")
-	t.eq(line(45), "■ Claude · work · 7d 95% · resets in 45s")
+	t.eq(line(SUNDAY - NOW), "■ Claude · 7d 95% · resets Sun")
+	t.eq(line(23 * HOUR + 59 * MINUTE), "■ Claude · 7d 95% · resets in 23h")
+	t.eq(line(45), "■ Claude · 7d 95% · resets in 45s")
 end)
 
 t.test("a quota without an account name shows the provider and the window only", function()
@@ -120,8 +155,8 @@ t.test("two accounts named as their provider show their email's domains in the l
 		{ "anthropic", "claude@home.it", "5 Hour", "Claude 5 Hour", 1.0, "exhausted" },
 		{ "anthropic", "claude@work.com", "5 Hour", "Claude 5 Hour", 0.9, "warning" },
 	}))
-	t.eq(visible.chrome(out)[2], "■ Claude · home.it · 5h 100% · resets Sun +1")
-	t.eq(visible.titles(out, "Claude · home.it · 5h 100%"), {
+	t.eq(visible.chrome(out)[2], "■ Claude · work.com · 5h 90% · resets Sun")
+	t.eq(visible.titles(out, "Claude · work.com · 5h 90%"), {
 		"Claude · home.it · 5h 100% · resets Sun\nClaude · work.com · 5h 90% · resets Sun",
 	})
 end)
@@ -132,7 +167,7 @@ end)
 
 t.test("the quota line shows in the Recent view too", function()
 	local out = view({ quota({ used = 0.97, status = "warning" }) }, { view = "recent", sessions = {} })
-	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 7d 97% · resets Sun" })
+	t.eq(visible.chrome(out), { SWITCH, "■ Claude · 7d 97% · resets Sun" })
 end)
 
 t.test("the sidebar redraws when the reset shows another text, and when the window resets", function()

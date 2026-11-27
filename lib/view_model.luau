@@ -132,8 +132,8 @@ export type Input = {
 	--- The model (`provider/model`) of each session file the session reader read (main agents' and subagents'), by
 	--- file; a subagent's hover card names its model from it.
 	routes: { [string]: string }?,
-	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. A quota near or
-	--- at its limit shows as one line under the Live/Recent switch.
+	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. When every account
+	--- of a provider has a quota near or at its limit, one line under the Live/Recent switch says so.
 	quotas: { Quota }?,
 	--- What each live omp session cost, by session file, its subagents included; a session that is absent has no cost
 	--- line in its hover card.
@@ -1306,11 +1306,19 @@ end
 -- How bad each quota status is; a quota that is fine has none and shows no line.
 local QUOTA_RANK: { [string]: number } = { exhausted = 2, warning = 1 }
 
--- A quota near or at its limit, with the seconds left until its window resets.
+-- A quota whose window has not reset, with the seconds left until it does.
 type HotQuota = { quota: Quota, left: number }
 
--- The quotas near or at their limit whose window has not reset at `time` (`os.time()`), the worst first: exhausted
--- before warning, then the higher use.
+-- Whether quota `a` is nearer its limit than `b`: exhausted before warning before ok, then the higher use.
+local function worse(a: Quota, b: Quota): boolean
+	local ra, rb = QUOTA_RANK[a.status] or 0, QUOTA_RANK[b.status] or 0
+	if ra ~= rb then
+		return ra > rb
+	end
+	return a.used > b.used
+end
+
+-- The quotas near or at their limit whose window has not reset at `time` (`os.time()`), the worst first.
 local function hotQuotas(quotas: { Quota }?, time: number): { HotQuota }
 	local hot: { HotQuota } = {}
 	local list: { Quota } = quotas or {}
@@ -1321,13 +1329,82 @@ local function hotQuotas(quotas: { Quota }?, time: number): { HotQuota }
 		end
 	end
 	table.sort(hot, function(a, b)
-		local ra, rb = QUOTA_RANK[a.quota.status], QUOTA_RANK[b.quota.status]
-		if ra ~= rb then
-			return ra > rb
-		end
-		return a.quota.used > b.quota.used
+		return worse(a.quota, b.quota)
 	end)
 	return hot
+end
+
+-- What the quota line shows: `shown`, for each provider at risk, its account with the most room (the one omp uses
+-- next) with that account's worst limit, the worst first; `all`, every quota near or at its limit, grouped by
+-- provider (the providers of `shown` first, in its order); and `named`, the providers with 2 or more accounts, whose
+-- quotas show their account's name. A provider is at risk when the worst limit of each of its accounts is near or at
+-- its limit: omp rotates to an account with room, so one exhausted account alone stops nothing.
+type QuotaReport = { shown: { HotQuota }, all: { HotQuota }, named: { [string]: boolean } }
+
+local function quotaReport(quotas: { Quota }?, time: number): QuotaReport
+	-- The worst current limit of each account, by provider and account name ("" for none).
+	local worst: { [string]: { [string]: HotQuota } } = {}
+	local providers: { string } = {}
+	for _, quota in quotas or {} do
+		local left = quota.resetsAt / 1000 - time
+		if left > 0 then
+			local accounts = worst[quota.provider]
+			if not accounts then
+				accounts = {}
+				worst[quota.provider] = accounts
+				table.insert(providers, quota.provider)
+			end
+			local key = quota.account or ""
+			local current = accounts[key]
+			if not current or worse(quota, current.quota) then
+				accounts[key] = { quota = quota, left = left }
+			end
+		end
+	end
+	local shown: { HotQuota } = {}
+	local named: { [string]: boolean } = {}
+	for _, provider in providers do
+		local roomiest: HotQuota? = nil
+		local count = 0
+		local atRisk = true
+		for _, limit in worst[provider] do
+			count += 1
+			if not QUOTA_RANK[limit.quota.status] then
+				atRisk = false
+			end
+			if not roomiest or worse(roomiest.quota, limit.quota) then
+				roomiest = limit
+			end
+		end
+		named[provider] = count > 1
+		if atRisk and roomiest then
+			table.insert(shown, roomiest)
+		end
+	end
+	table.sort(shown, function(a, b)
+		return worse(a.quota, b.quota)
+	end)
+	-- The tooltip's providers: those of the line in its order, then the others, the one with the worst limit first.
+	local all = hotQuotas(quotas, time)
+	local place: { [string]: number } = {}
+	for i, entry in shown do
+		place[entry.quota.provider] = i
+	end
+	local index: { [HotQuota]: number } = {}
+	for i, entry in all do
+		index[entry] = i
+		if not place[entry.quota.provider] then
+			place[entry.quota.provider] = #shown + i
+		end
+	end
+	table.sort(all, function(a, b)
+		local pa, pb = place[a.quota.provider], place[b.quota.provider]
+		if pa ~= pb then
+			return pa < pb
+		end
+		return index[a] < index[b]
+	end)
+	return { shown = shown, all = all, named = named }
 end
 
 -- Which agent each pin names, by the pin's index: the running agent that has the pin's session file open, else the
@@ -1841,11 +1918,12 @@ local function viewButton(label: string, view: View, shown: View): Node
 	}
 end
 
--- A quota as one line, in two parts: `Claude · work · 7d Fable 97%` and its reset, `· resets Sun`. The reset reads as
--- a weekday when a day or more away, else as the time left (`resets in 38m`).
-local function quotaText(quota: Quota, left: number): (string, string)
+-- A quota as one line, in two parts: `Claude · work · 7d Fable 97%` and its reset, `· resets Sun`. The account's name
+-- shows only when `named` (its provider has 2 or more accounts). The reset reads as a weekday when a day or more away,
+-- else as the time left (`resets in 38m`).
+local function quotaText(quota: Quota, left: number, named: boolean): (string, string)
 	local parts = { quota.provider }
-	if quota.account then
+	if named and quota.account then
 		table.insert(parts, quota.account)
 	end
 	table.insert(parts, string.format("%s %d%%", quota.label, math.round(quota.used * 100)))
@@ -1853,31 +1931,33 @@ local function quotaText(quota: Quota, left: number): (string, string)
 	return table.concat(parts, " · "), "· resets " .. reset
 end
 
--- The quota line under the Live/Recent switch: the worst quota near or at its limit (exhausted before warning, then
--- the higher use) after a square in the warning or the error color, "+N" for the others, and all of them in the
--- tooltip; nil while every quota is fine. When the line is too narrow, its reset is the part cut first.
+-- The quota line under the Live/Recent switch, while a provider is at risk (see `quotaReport`): the account with the
+-- most room of the worst provider at risk, with its worst limit, after a square in the warning or the error color,
+-- then "+N" for the other providers at risk. The tooltip lists every limit near or at its limit, of every account.
+-- Nil while no provider is at risk. When the line is too narrow, its reset is the part cut first.
 local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	if not time then
 		return nil
 	end
-	local hot = hotQuotas(quotas, time)
-	if #hot == 0 then
+	local report = quotaReport(quotas, time)
+	if #report.shown == 0 then
 		return nil
 	end
 	local lines: { string } = {}
-	for _, entry in hot do
-		local main, reset = quotaText(entry.quota, entry.left)
+	for _, entry in report.all do
+		local main, reset = quotaText(entry.quota, entry.left, report.named[entry.quota.provider])
 		table.insert(lines, main .. " " .. reset)
 	end
-	local worst = hot[1]
-	local main, reset = quotaText(worst.quota, worst.left)
+	local first = report.shown[1]
+	local main, reset = quotaText(first.quota, first.left, report.named[first.quota.provider])
 	local parts: { Node } = {
-		squareNode(if worst.quota.status == "exhausted" then "failed" else "waiting"),
+		squareNode(if first.quota.status == "exhausted" then "failed" else "waiting"),
 		nameNode(main, nil, true),
 		detailNode(reset),
 	}
-	if #hot > 1 then
-		table.insert(parts, { k = "text", p = { text = "+" .. tostring(#hot - 1), wrap = "none", role = ROLE.meta } })
+	if #report.shown > 1 then
+		local more = "+" .. tostring(#report.shown - 1)
+		table.insert(parts, { k = "text", p = { text = more, wrap = "none", role = ROLE.meta } })
 	end
 	return {
 		k = "row",
@@ -1887,8 +1967,8 @@ local function quotaLine(quotas: { Quota }?, time: number?): Node?
 end
 
 -- The head: the Live/Recent switch, with the waiting mark and the number of Needs you cards after Live while any
--- shows (in both views), and under it the quota line while a quota is near or at its limit. What the old ⋯ menu did
--- stays in the palette commands.
+-- shows (in both views), and under it the quota line while a provider is at risk (see `quotaReport`). What the old ⋯
+-- menu did stays in the palette commands.
 local function chrome(view: View, input: Input, needs: number): Node
 	local views: { Node } = { viewButton("Live", "live", view) }
 	if needs > 0 then
