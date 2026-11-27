@@ -27,7 +27,7 @@ t.test("each agent state puts its own state on the title icon, and each zone its
 		"waiting: :terminal(Waiting for you) b",
 		"working: ■ Working 1 busy",
 		"working: :terminal(Working) a 0s",
-		"idle: ■ Idle 1 idle",
+		"idle: ■ Idle 1",
 		"idle: :terminal(Idle) c",
 	})
 end)

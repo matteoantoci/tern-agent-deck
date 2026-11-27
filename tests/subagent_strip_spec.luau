@@ -269,7 +269,7 @@ t.test("a working agent in a project shows its open subagent lines inside that p
 		"alpha [:plus](New tab in this repo)",
 		":terminal(Working) Lead [▮] 0s",
 		"■(Running) Ticket07",
-		"■ Idle 2 idle",
+		"■ Idle 2",
 		"beta [:plus](New tab in this repo)",
 		":terminal(Idle) Docs",
 		"tmp [:plus](New tab in this folder)",

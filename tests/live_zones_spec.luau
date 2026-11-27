@@ -45,15 +45,15 @@ t.test("Live shows the zones Needs you, Working and Idle in that order, each wit
 		agent({ pane = 3, state = "waiting_input", title = ICON .. " c" }),
 		agent({ pane = 4, state = "working", title = ICON .. " d" }),
 	})
-	t.eq(visible.zones(out), { "■ Needs you 1", "■ Working 2 busy", "■ Idle 1 idle" })
+	t.eq(visible.zones(out), { "■ Needs you 1", "■ Working 2 busy", "■ Idle 1" })
 	t.eq(visible.states(out)[1], "waiting: ■ Needs you 1")
 	t.eq(visible.state(out, "Working 2 busy"), "working")
-	t.eq(visible.state(out, "Idle 1 idle"), "idle")
+	t.eq(visible.state(out, "Idle 1"), "idle")
 end)
 
 t.test("a zone with no agents hides", function()
 	t.eq(visible.zones(view({ agent({ state = "working", title = ICON .. " a" }) })), { "■ Working 1 busy" })
-	t.eq(visible.zones(view({ agent({ state = "idle", title = ICON .. " a" }) })), { "■ Idle 1 idle" })
+	t.eq(visible.zones(view({ agent({ state = "idle", title = ICON .. " a" }) })), { "■ Idle 1" })
 end)
 
 t.test("with no agent, Live shows one calm line", function()
@@ -276,7 +276,7 @@ t.test("idle agents whose last turn ended a day ago or more fold under a closed 
 		agent({ pane = 2, title = ICON .. " today", activeAt = NOW - 3600 }),
 		agent({ pane = 3, title = ICON .. " old review", activeAt = NOW - DAY }),
 	})
-	t.eq(visible.zones(out), { "■ Idle 3 idle" })
+	t.eq(visible.zones(out), { "■ Idle 3" })
 	t.eq(visible.zone(out, "Idle"), { DECK_LABEL, ICON .. "(Idle) today 1h", ":chev-r Older than a day 2" })
 	t.eq(visible.click(out, "Older than a day"), "older")
 end)

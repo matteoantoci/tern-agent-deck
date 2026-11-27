@@ -59,7 +59,7 @@ t.test("Needs you shows each waiting agent as a card: title icon, title, wait ti
 			}),
 		},
 	}).view
-	t.eq(visible.zones(out), { "■ Needs you 1", "■ Idle 1 idle" })
+	t.eq(visible.zones(out), { "■ Needs you 1", "■ Idle 1" })
 	t.eq(visible.cards(out), {
 		"\u{F0E7}(Waiting for you) ask 1m | Which branch should I rebase onto? | tern-agents · tab 2",
 	})
