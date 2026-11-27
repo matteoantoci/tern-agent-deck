@@ -1345,7 +1345,8 @@ local function quotaReport(quotas: { Quota }?, time: number): QuotaReport
 	-- The worst current limit of each account, by provider and account name ("" for none).
 	local worst: { [string]: { [string]: HotQuota } } = {}
 	local providers: { string } = {}
-	for _, quota in quotas or {} do
+	local list: { Quota } = quotas or {}
+	for _, quota in list do
 		local left = quota.resetsAt / 1000 - time
 		if left > 0 then
 			local accounts = worst[quota.provider]
