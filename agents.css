@@ -36,20 +36,27 @@
 	background: transparent;
 	-webkit-backdrop-filter: blur(24px);
 	backdrop-filter: blur(24px);
+}
+
+/* Under a quota line the head closes with its own hairline; without one, the switch's hairline is the head's edge. */
+[data-role='agents.chrome']:has([data-role='agents.quota']) {
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
+/* The switch ends on its own hairline, and the shown view's underline sits on it, as in Tern's own tab strips. */
 [data-role='agents.root'] [data-role='agents.views'] {
 	height: 40px;
 	gap: 16px;
 	padding: 0 8px;
+	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
-/* The quota line under the switch: a warning or error square, the worst quota, "+N" for the others. */
+/* The quota line under the switch: a warning or error square, the worst quota, "+N" for the others. It sits between
+   the switch's hairline and the head's, with the same 4px above and below its 24px row (about 10px around the text). */
 [data-role='agents.root'] [data-role='agents.quota'] {
 	height: 24px;
 	gap: 8px;
-	margin-bottom: 4px;
+	margin: 4px 0;
 	padding: 0 8px;
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
