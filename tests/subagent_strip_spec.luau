@@ -153,12 +153,12 @@ t.test("every agent shows its subagent lines open until the user closes them, fo
 		t.eq(visible.agentRows(view("working", running, { focused = focused })), { ":terminal(Working) Lead [:chev] 0s", "■(Running) A" })
 		t.eq(visible.button(view("working", running, { focused = focused }), "Lead"), "subs=7 closed")
 		t.eq(visible.agentRows(view("idle", queued, { focused = focused })), {
-			":terminal(Idle) Lead [1 subagent]",
+			":terminal(Idle) Lead [:chev]",
 			"■(Queued) B",
 			"■(Failed) C failed",
 		})
 	end
-	t.eq(visible.agentRows(view("working", running)), { ":terminal(Working) Lead [▮] 0s", "■(Running) A" })
+	t.eq(visible.agentRows(view("working", running)), { ":terminal(Working) Lead [:chev] 0s", "■(Running) A" })
 	t.eq(visible.agentRows(view("working", running, { focused = 7, closed = CLOSED })), { ":terminal(Working) Lead [▮] 0s" })
 	t.eq(visible.agentRows(view("idle", queued, { closed = CLOSED })), { ":terminal(Idle) Lead [1 subagent]", "■(Failed) C failed" })
 end)
