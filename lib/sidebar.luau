@@ -4,6 +4,7 @@
 -- model, the placement plan and the patch diff make none.
 
 local backToMain = require("./back_to_main")
+local costReader = require("./cost_reader")
 local effortReader = require("./effort_reader")
 local newTab = require("./new_tab")
 local patch = require("./patch")
@@ -186,6 +187,7 @@ local function snapshot(cx: WindowCx): viewModel.Input
 		sessions = sessionReader.sessions(),
 		routes = sessionReader.models(),
 		quotas = quotaReader.quotas(),
+		cost = costReader.costs(),
 		focused = focusedPane(cx),
 		plugin = tern.plugin.id,
 	})
@@ -659,7 +661,8 @@ function sidebar.resume(cx: WindowCx, file: string)
 end
 
 --- Reads the omp sessions again (at most once a minute unless `force`), the session file each pane's omp reported
---- and the current subscription quotas, and redraws when they changed.
+--- (with the models and the costs of those sessions), the current subscription quotas and the credential types, and
+--- redraws when they changed.
 function sidebar.scanSessions(force: boolean)
 	if hidden() then
 		return
@@ -668,6 +671,9 @@ function sidebar.scanSessions(force: boolean)
 		sidebar.refresh(later)
 	end)
 	quotaReader.read(home(), function(later: WindowCx)
+		sidebar.refresh(later)
+	end)
+	costReader.readCredentials(home(), function(later: WindowCx)
 		sidebar.refresh(later)
 	end)
 	sidebar.readReported()

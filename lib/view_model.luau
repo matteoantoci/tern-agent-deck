@@ -93,6 +93,10 @@ export type Quota = {
 	resetsAt: number,
 }
 
+--- What an omp session cost, its subagents included, in US dollars at omp's list prices: through API-key accounts
+--- (real money spent) and through subscription accounts (not billed).
+export type Cost = { apiUsd: number, subUsd: number }
+
 export type Input = {
 	agents: { Agent },
 	--- `tern.now()`: monotonic milliseconds.
@@ -128,6 +132,9 @@ export type Input = {
 	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. A quota near or
 	--- at its limit shows as one line under the Live/Recent switch.
 	quotas: { Quota }?,
+	--- What each live omp session cost, by session file, its subagents included; a session that is absent has no cost
+	--- line in its hover card.
+	cost: { [string]: Cost }?,
 	--- The id the plugin runs under (`tern.plugin.id`), which names its commands; the status segment has no click
 	--- without it.
 	plugin: string?,
@@ -178,6 +185,8 @@ type Shared = {
 	routes: { [string]: string },
 	--- Whether each agent's subagent lines are open, by pane, as the user chose; nil when the user chose none.
 	subsOpen: { [number]: boolean },
+	--- What each live omp session cost, by session file.
+	cost: { [string]: Cost },
 }
 
 local function nonEmpty(text: string?): string?
@@ -468,6 +477,36 @@ local function muted(text: string, style: string?): Node
 	return { k = "text", p = { spans = { { t = text, s = style or "muted" } } } }
 end
 
+-- An amount in US dollars with two decimals; an amount under one cent shows as `<$0.01`.
+local function usd(amount: number): string
+	return if amount < 0.01 then "<$0.01" else string.format("$%.2f", amount)
+end
+
+-- A hover card's cost lines: the real money spent first, then the subscription use at list price, muted so that it
+-- never reads as a bill. Nil when there is no cost.
+local function costLines(cost: Cost?): { Node }?
+	if not cost then
+		return nil
+	end
+	local lines: { Node } = {}
+	if cost.apiUsd > 0 then
+		table.insert(lines, { k = "text", p = { spans = { { t = "Spent " }, { t = usd(cost.apiUsd), s = "num" } } } })
+	end
+	if cost.subUsd > 0 then
+		table.insert(lines, {
+			k = "text",
+			p = {
+				spans = {
+					{ t = "≈ ", s = "muted" },
+					{ t = usd(cost.subUsd), s = "muted num" },
+					{ t = " at API prices", s = "muted" },
+				},
+			},
+		})
+	end
+	return if #lines > 0 then lines else nil
+end
+
 -- A hover card: the state, its time and the tab on the top line, then the title, the message, the facts, the cost,
 -- the subagent counts and a note, and last the hint.
 local function card(parts: Card): Node
@@ -685,6 +724,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 			name = rowTitle(agent, shared),
 			message = if message then messageNode(message, agent.summary, agent.summarizing) else nil,
 			facts = facts,
+			cost = costLines(agent.sessionFile and shared.cost[agent.sessionFile]),
 			crew = crew,
 			hint = hintText(clickText(agent), items),
 		}),
@@ -1691,6 +1731,7 @@ local function context(input: Input): Shared
 		focused = input.focused,
 		viewing = input.viewing or {},
 		routes = input.routes or {},
+		cost = input.cost or {},
 		subsOpen = input.subsOpen or {},
 	}
 	for _, agent in input.agents do
