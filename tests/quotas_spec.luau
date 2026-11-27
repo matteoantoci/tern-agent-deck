@@ -27,6 +27,22 @@ t.test("a row gives the provider's and the account's names, the window, the use,
 	})
 end)
 
+t.test("each provider in omp's usage history shows under its display name, and an unknown one under its id", function()
+	local found = parse({
+		row({ "anthropic", "a@x.com", "5 Hour", "Claude 5 Hour", 0.5, "ok", NOW + HOUR }),
+		row({ "xai-oauth", "a@x.com", "Weekly", "GrokChat (Weekly)", 0.5, "ok", NOW + HOUR }),
+		row({ "google-antigravity", "a@x.com", "5 Hour", "Gemini 5 Hour", 0.5, "ok", NOW + HOUR }),
+		row({ "opencode-go", "a@x.com", "5 Hour", "Go 5 Hour", 0.5, "ok", NOW + HOUR }),
+		row({ "deepai", "", "", "Theos", 0.5, "ok", NOW + HOUR }),
+		row({ "acme", "", "", "Theos", 0.5, "ok", NOW + HOUR }),
+	})
+	local names: { string } = {}
+	for _, q in found do
+		table.insert(names, q.provider)
+	end
+	t.eq(names, { "Claude", "Grok", "Gemini", "OpenCode Go", "DeepAI", "acme" })
+end)
+
 t.test("hour and day windows shorten, other windows stay as they are, and a row with no window names its limit", function()
 	local found = parse({
 		row({ "anthropic", "a@x.com", "5 Hour", "Claude 5 Hour", 0.5, "ok", NOW + HOUR }),
