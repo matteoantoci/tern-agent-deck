@@ -116,8 +116,10 @@ local function snapshot(cx: WindowCx): viewModel.Input
 		panes[info.pane] = info
 	end
 	local tabNames: { [number]: string? } = {}
+	local tabNumbers: { [number]: number } = {}
 	for _, tab in cx.session:tabs() do
 		tabNames[tab.id] = str(tab.name)
+		tabNumbers[tab.id] = tab.position
 	end
 	local agents: { viewModel.Agent } = {}
 	local reported = sessionReader.reported()
@@ -143,6 +145,7 @@ local function snapshot(cx: WindowCx): viewModel.Input
 			state = block.state,
 			title = info and str(info.title),
 			tab = tab,
+			tabNumber = tab and tabNumbers[tab],
 			tabName = tab and tabNames[tab],
 			cwd = cwd,
 			model = str(block.model),

@@ -17,8 +17,11 @@ export type Agent = {
 	state: AgentState,
 	--- The pane title as Tern gives it (omp starts it with an icon character and a space).
 	title: string?,
-	--- The tab the agent's pane sits in (nil when parked) and the name the user gave that tab.
+	--- The tab the agent's pane sits in (nil when parked) and the name the user gave that tab. `tab` is Tern's
+	--- internal tab id, for grouping only; `tabNumber` is the one-based place of that tab in Tern's tab bar, for
+	--- display.
 	tab: number?,
+	tabNumber: number?,
 	tabName: string?,
 	cwd: string?,
 	--- The model as Tern shows it; may end in a thinking-level glyph.
@@ -720,7 +723,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 			state = shown.label,
 			seconds = shown.seconds,
 			turn = if agent.state == "working" then math.max(0, shared.now - (agent.workingSince or shared.now)) else nil,
-			tab = if agent.tab then string.format("tab %.0f", agent.tab) else nil,
+			tab = if agent.tabNumber then string.format("tab %.0f", agent.tabNumber) else nil,
 			name = rowTitle(agent, shared),
 			message = if message then messageNode(message, agent.summary, agent.summarizing) else nil,
 			facts = facts,
@@ -1608,8 +1611,8 @@ local function cardFooter(agent: Agent, role: string?): Node?
 	if project then
 		table.insert(parts, project)
 	end
-	if agent.tab then
-		table.insert(parts, string.format("tab %.0f", agent.tab))
+	if agent.tabNumber then
+		table.insert(parts, string.format("tab %.0f", agent.tabNumber))
 	end
 	if role then
 		table.insert(parts, role)

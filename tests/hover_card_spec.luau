@@ -18,7 +18,8 @@ local NONE = {}
 local function agent(fields: { [string]: any }): { [string]: any }
 	local a: { [string]: any } = {
 		pane = 4,
-		tab = 3,
+		tab = 944892805171,
+		tabNumber = 3,
 		state = "idle",
 		cwd = "/Users/me/repo",
 		repo = "/Users/me/repo",
@@ -104,7 +105,7 @@ end)
 
 t.test("a stopped pinned agent's card says how long ago it stopped and that a click resumes it", function()
 	local out = build({
-		agents = { agent({ state = "exited", tab = NONE, activeAt = NOW - 2 * DAY }) },
+		agents = { agent({ state = "exited", tab = NONE, tabNumber = NONE, activeAt = NOW - 2 * DAY }) },
 		pins = { { pane = 4, sessionFile = FILE } },
 	})
 	t.eq(
@@ -135,7 +136,7 @@ end)
 
 t.test("a card leaves out what is not known: no tab, no message, no model, no kind", function()
 	local out = build({
-		agents = { agent({ tab = NONE, activeAt = NONE, sessionFile = NONE, route = NONE, effort = NONE }) },
+		agents = { agent({ tab = NONE, tabNumber = NONE, activeAt = NONE, sessionFile = NONE, route = NONE, effort = NONE }) },
 	})
 	t.eq(visible.hover(out, "Fix login"), ICON .. " Idle\nFix login\nClick: go to it · Right-click: Pin")
 end)
