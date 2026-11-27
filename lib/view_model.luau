@@ -407,8 +407,8 @@ local function squareNode(state: State, label: string?): Node
 end
 
 -- Tern's icon for an agent whose title has no omp icon (an agent that is not omp, or not titled yet). Tern ships no
--- icon named "agent"; `sparkle` is the one its aliases give a model.
-local AGENT_ICON = "sparkle"
+-- icon named "agent"; `terminal` is a name in its icon table.
+local AGENT_ICON = "terminal"
 
 -- The icon character omp puts at the start of a title, or nil when the title has none or no text follows it.
 local function titleGlyph(title: string?): string?

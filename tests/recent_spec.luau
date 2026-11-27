@@ -44,7 +44,7 @@ end
 
 -- A closed session's line: its title icon, its title, its age and the resume icon.
 local function line(title: string, age: string, glyph: boolean?): string
-	return (if glyph == false then ":sparkle" else ICON) .. "(Closed) " .. title .. " " .. age .. " :play"
+	return (if glyph == false then ":terminal" else ICON) .. "(Closed) " .. title .. " " .. age .. " :play"
 end
 
 local function view(agents: { any }, sessions: { any }, extra: { [string]: any }?): any
@@ -130,9 +130,9 @@ t.test("the sessions with no title of a day fold into one muted N untitled line 
 		session(4, nil, 13 * HOUR),
 		session(5, nil, 8 * DAY),
 	}, { earlierOpen = true })
-	t.eq(visible.zone(shown, "Today"), { DECK_LABEL, line("Plan", "1m", false), ":sparkle 2 untitled" })
-	t.eq(visible.zone(shown, "Yesterday"), { ":sparkle 1 untitled" })
-	t.eq(visible.zone(shown, "Earlier"), { ":sparkle 1 untitled" })
+	t.eq(visible.zone(shown, "Today"), { DECK_LABEL, line("Plan", "1m", false), ":terminal 2 untitled" })
+	t.eq(visible.zone(shown, "Yesterday"), { ":terminal 1 untitled" })
+	t.eq(visible.zone(shown, "Earlier"), { ":terminal 1 untitled" })
 	t.eq(visible.zones(shown)[1], "Today 3")
 	t.eq(visible.click(shown, "2 untitled"), nil)
 	t.eq(visible.menu(shown, "2 untitled"), {})
@@ -148,7 +148,7 @@ t.test("the untitled sessions take no place of the 50-session cap, and the N mor
 	end
 	local lines = visible.zone(view({}, many), "Today")
 	t.eq(#lines, 53)
-	t.eq({ lines[52], lines[53] }, { ":more 10 more", ":sparkle 10 untitled" })
+	t.eq({ lines[52], lines[53] }, { ":more 10 more", ":terminal 10 untitled" })
 end)
 
 t.test("a click on a session resumes its file in a new tab; the resume icon shows on hover", function()
@@ -183,7 +183,7 @@ end)
 
 t.test("a live agent whose session has no title yet hides the newest untitled session of its folder", function()
 	t.eq(visible.zone(view({ agent({ title = "omp" }) }, { session(1, nil, MIN), session(2, nil, HOUR) }), "Today"), {
-		":sparkle 1 untitled",
+		":terminal 1 untitled",
 	})
 end)
 

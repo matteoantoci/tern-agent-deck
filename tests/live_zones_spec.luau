@@ -163,7 +163,7 @@ t.test("an agent whose title has no omp icon shows Tern's agent icon in its stat
 		agent({ pane = 1, state = "working", title = "claude", workingSince = 0 }),
 		agent({ pane = 2, title = "", cwd = "/Users/me/codex-work" }),
 	})
-	t.eq(visible.agentRows(out), { ":sparkle(Working) claude 0s", ":sparkle(Idle) codex-work" })
+	t.eq(visible.agentRows(out), { ":terminal(Working) claude 0s", ":terminal(Idle) codex-work" })
 	t.eq(visible.state(out, "claude"), "working")
 	t.eq(visible.state(out, ") codex-work"), "idle")
 end)

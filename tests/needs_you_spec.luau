@@ -65,7 +65,7 @@ t.test("Needs you shows each waiting agent as a card: title icon, title, wait ti
 	})
 	t.eq(visible.cardStates(out, "ask"), { "waiting", "waiting" })
 	t.eq(visible.cardFooterFace(out, "ask"), "mono")
-	t.eq(visible.zone(out, "Idle"), { "tern-agents [:plus](New tab in this repo)", ":sparkle(Idle) plan" })
+	t.eq(visible.zone(out, "Idle"), { "tern-agents [:plus](New tab in this repo)", ":terminal(Idle) plan" })
 end)
 
 t.test("a pinned waiting agent is a card too, in no other zone", function()
@@ -74,14 +74,14 @@ t.test("a pinned waiting agent is a card too, in no other zone", function()
 		pins = { { pane = 3, cwd = REPO, title = "pinned ask" } },
 	}).view
 	t.eq(visible.zones(out), { "■ Needs you 1" })
-	t.eq(visible.cards(out), { ":sparkle(Waiting for you) pinned ask 30s | tern-agents · tab 1" })
+	t.eq(visible.cards(out), { ":terminal(Waiting for you) pinned ask 30s | tern-agents · tab 1" })
 end)
 
 t.test("a card's footer leaves out the tab or the project it does not know", function()
 	local out = build({
 		agents = { agent({ pane = 2, title = "loose", state = "waiting_input", activeAt = NOW - 5, cwd = "/tmp/x" }) },
 	}).view
-	t.eq(visible.cards(out), { ":sparkle(Waiting for you) loose 5s | x" })
+	t.eq(visible.cards(out), { ":terminal(Waiting for you) loose 5s | x" })
 end)
 
 t.test("Needs you hides when no agent waits", function()
@@ -121,10 +121,10 @@ t.test("Needs you orders the cards of agents and subagents by wait time, longest
 		},
 		subagents = { [7] = { agents = { sub("Anna", "Ask Why?", 150) }, incomplete = false } },
 	}).view), {
-		":sparkle(Waiting for you) early 5m | tmp",
-		":sparkle(Waiting for you) middle 3m | tern-agents",
+		":terminal(Waiting for you) early 5m | tmp",
+		":terminal(Waiting for you) middle 3m | tern-agents",
 		"■(Waiting for you) Anna in Lead 2m | Why? | tern-agents · task",
-		":sparkle(Waiting for you) late 1m | tern-agents",
+		":terminal(Waiting for you) late 1m | tern-agents",
 	})
 end)
 
@@ -150,7 +150,7 @@ t.test("a card's hover card holds the agent's facts and its last message", funct
 	}).view
 	t.eq(
 		visible.cardHover(out, ") ask"),
-		":sparkle Waiting for you 1m\nask\nGo?\nopus\nClick: go to it and answer · Right-click: Pin, Interrupt"
+		":terminal Waiting for you 1m\nask\nGo?\nopus\nClick: go to it and answer · Right-click: Pin, Interrupt"
 	)
 end)
 
