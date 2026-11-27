@@ -28,5 +28,7 @@ require("./show_subagent_spec")
 require("./state_colors_spec")
 require("./live_zones_spec")
 require("./copy_session_spec")
+require("./quotas_spec")
+require("./quota_line_spec")
 
 t.run()

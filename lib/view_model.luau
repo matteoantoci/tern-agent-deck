@@ -78,6 +78,18 @@ export type Session = {
 --- project) or the closed sessions (the folders with closed sessions, newest first).
 export type View = "live" | "recent"
 
+--- A subscription quota, as the quota reader found it in omp's `usage_history`: the provider's and the account's
+--- display names (`Claude`, `work`; no account for a row without an email), the window (`7d`, `5h`, `Weekly`), the
+--- fraction used (0..1), how close it is to its limit, and when its window resets (wall-clock milliseconds).
+export type Quota = {
+	provider: string,
+	account: string?,
+	label: string,
+	used: number,
+	status: "ok" | "warning" | "exhausted",
+	resetsAt: number,
+}
+
 export type Input = {
 	agents: { Agent },
 	--- `tern.now()`: monotonic milliseconds.
@@ -109,6 +121,9 @@ export type Input = {
 	--- The model (`provider/model`) of each session file the session reader read (main agents' and subagents'), by
 	--- file; a subagent's hover card names its model from it.
 	routes: { [string]: string }?,
+	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. A quota near or
+	--- at its limit shows as one line under the Live/Recent switch.
+	quotas: { Quota }?,
 	--- The id the plugin runs under (`tern.plugin.id`), which names its commands; the status segment has no click
 	--- without it.
 	plugin: string?,
@@ -302,6 +317,7 @@ local ROLE = {
 	root = "agents.root",
 	chrome = "agents.chrome",
 	views = "agents.views",
+	quota = "agents.quota",
 	view = "agents.view",
 	viewOn = "agents.view.on",
 	body = "agents.body",
@@ -1390,14 +1406,75 @@ local function viewButton(label: string, view: View, shown: View): Node
 	}
 end
 
--- The head: only the Live/Recent switch. What the old ⋯ menu did stays in the palette commands.
-local function chrome(view: View): Node
-	local views: { Node } = { viewButton("Live", "live", view), viewButton("Recent", "recent", view) }
-	return {
-		k = "col",
-		p = { key = "chrome", role = ROLE.chrome, gap = "none" },
-		c = { { k = "row", p = { key = "views", role = ROLE.views, gap = "none" }, c = views } },
+-- How bad each quota status is; a quota that is fine has none and shows no line.
+local QUOTA_RANK: { [string]: number } = { exhausted = 2, warning = 1 }
+
+-- A quota as one line: `Claude · work · 7d 97% · resets Sun`. The reset reads as a weekday when a day or more away,
+-- else as the time left (`resets in 38m`).
+local function quotaText(quota: Quota, left: number): string
+	local parts = { quota.provider }
+	if quota.account then
+		table.insert(parts, quota.account)
+	end
+	table.insert(parts, string.format("%s %d%%", quota.label, math.round(quota.used * 100)))
+	local reset = if left >= DAY then os.date("%a", quota.resetsAt // 1000) else "in " .. duration(left)
+	table.insert(parts, "resets " .. reset)
+	return table.concat(parts, " · ")
+end
+
+-- The quota line under the Live/Recent switch: the worst quota near or at its limit (exhausted before warning, then
+-- the higher use) after a square in the warning or the error color, "+N" for the others, and all of them in the
+-- tooltip; nil while every quota is fine.
+local function quotaLine(quotas: { Quota }?, time: number?): Node?
+	if not quotas or not time then
+		return nil
+	end
+	local hot: { { quota: Quota, left: number } } = {}
+	for _, quota in quotas do
+		local left = quota.resetsAt / 1000 - time
+		if QUOTA_RANK[quota.status] and left > 0 then
+			table.insert(hot, { quota = quota, left = left })
+		end
+	end
+	if #hot == 0 then
+		return nil
+	end
+	table.sort(hot, function(a, b)
+		local ra, rb = QUOTA_RANK[a.quota.status], QUOTA_RANK[b.quota.status]
+		if ra ~= rb then
+			return ra > rb
+		end
+		return a.quota.used > b.quota.used
+	end)
+	local lines: { string } = {}
+	for _, entry in hot do
+		table.insert(lines, quotaText(entry.quota, entry.left))
+	end
+	local worst = hot[1].quota
+	local parts: { Node } = {
+		squareNode(if worst.status == "exhausted" then "failed" else "waiting"),
+		nameNode(lines[1]),
 	}
+	if #hot > 1 then
+		table.insert(parts, { k = "text", p = { text = "+" .. tostring(#hot - 1), wrap = "none", role = ROLE.meta } })
+	end
+	return {
+		k = "row",
+		p = { key = "quota", role = ROLE.quota, gap = "sm", title = table.concat(lines, "\n") },
+		c = parts,
+	}
+end
+
+-- The head: the Live/Recent switch, and under it the quota line while a quota is near or at its limit. What the old
+-- ⋯ menu did stays in the palette commands.
+local function chrome(view: View, input: Input): Node
+	local views: { Node } = { viewButton("Live", "live", view), viewButton("Recent", "recent", view) }
+	local children: { Node } = { { k = "row", p = { key = "views", role = ROLE.views, gap = "none" }, c = views } }
+	local quota = quotaLine(input.quotas, input.time)
+	if quota then
+		table.insert(children, quota)
+	end
+	return { k = "col", p = { key = "chrome", role = ROLE.chrome, gap = "none" }, c = children }
 end
 
 -- The closed sessions of each folder, newest first, by folder.
@@ -1665,7 +1742,7 @@ function viewModel.build(input: Input): Output
 		view = {
 			k = "col",
 			p = { role = ROLE.root, gap = "none" },
-			c = { chrome(view), { k = "col", p = { key = "body", role = ROLE.body, gap = "none" }, c = body } },
+			c = { chrome(view, input), { k = "col", p = { key = "body", role = ROLE.body, gap = "none" }, c = body } },
 		},
 		status = status(input.agents, input.plugin),
 		waiting = waiting,
