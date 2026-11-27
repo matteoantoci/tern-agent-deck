@@ -33,7 +33,7 @@ t.test("hour and day windows shorten, other windows stay as they are, and a row 
 		row({ "xai-oauth", "a@x.com", "Weekly", "GrokChat (Weekly)", 0.5, "ok", NOW + HOUR }),
 		row({ "deepai", "", "", "Theos", 0.5, "ok", NOW + HOUR }),
 	})
-	t.eq({ found[1].label, found[2].label, found[3].label }, { "5h", "Weekly", "Theos" })
+	t.eq({ found[1].label, found[2].label, found[3].label }, { "5h", "Weekly GrokChat", "Theos" })
 end)
 
 t.test("a limit's qualifier follows its window, so two limits of one window stay apart", function()
@@ -42,7 +42,16 @@ t.test("a limit's qualifier follows its window, so two limits of one window stay
 		row({ "anthropic", "a@x.com", "7 Day", "Claude 7 Day (Fable)", 0.9, "warning", NOW + HOUR }),
 		row({ "xai-oauth", "a@x.com", "Weekly", "GrokChat (Weekly)", 0.5, "ok", NOW + HOUR }),
 	})
-	t.eq({ found[1].label, found[2].label, found[3].label }, { "7d", "7d Fable", "Weekly" })
+	t.eq({ found[1].label, found[2].label, found[3].label }, { "7d", "7d Fable", "Weekly GrokChat" })
+end)
+
+t.test("when the parenthesis only repeats the window, the limit's name before it is the qualifier", function()
+	local found = parse({
+		row({ "xai-oauth", "a@x.com", "Weekly", "API (Weekly)", 0.97, "warning", NOW + HOUR }),
+		row({ "xai-oauth", "a@x.com", "Weekly", "GrokChat (Weekly)", 0.98, "warning", NOW + HOUR }),
+		row({ "xai-oauth", "a@x.com", "Weekly", "(Weekly)", 0.5, "ok", NOW + HOUR }),
+	})
+	t.eq({ found[1].label, found[2].label, found[3].label }, { "Weekly API", "Weekly GrokChat", "Weekly" })
 end)
 
 t.test("a quota whose window reset already, or that names no reset, is left out", function()
