@@ -32,5 +32,8 @@ require("./quotas_spec")
 require("./quota_line_spec")
 require("./quota_reader_spec")
 require("./hover_card_spec")
+require("./costs_spec")
+require("./cost_reader_spec")
+require("./cost_card_spec")
 
 t.run()

@@ -682,4 +682,30 @@ function visible.cardHover(view: Node, text: string): string?
 	return table.concat(out, "\n")
 end
 
+-- Whether every span of `n` is drawn muted or dim (a text node whose spans all carry `muted` or `dim`).
+local function allMuted(n: Node): boolean
+	local spans = props(n).spans
+	if n.k ~= "text" or type(spans) ~= "table" or #spans == 0 then
+		return false
+	end
+	for _, span in spans do
+		local style = " " .. tostring(type(span) == "table" and span.s or "") .. " "
+		if not (string.find(style, " muted ", 1, true) or string.find(style, " dim ", 1, true)) then
+			return false
+		end
+	end
+	return true
+end
+
+--- The lines of the hover card of the row that shows `text` that are drawn muted, in order.
+function visible.hoverMuted(view: Node, text: string): { string }
+	local out: { string } = {}
+	for _, child in kids(props(findRow(view, text)).hovercard or {}) do
+		if allMuted(child) then
+			table.insert(out, line(child))
+		end
+	end
+	return out
+end
+
 return visible
