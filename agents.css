@@ -434,6 +434,21 @@
 	color: var(--t1);
 }
 
+/* The folded strip's hit area: at least 24px wide and the full 28px row height. It extends toward the title over the
+   row gap, so the bars stay where they are and the title keeps its width. */
+[data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally']) {
+	position: relative;
+}
+
+[data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally'])::before {
+	content: '';
+	position: absolute;
+	top: -4px;
+	bottom: -4px;
+	right: 0;
+	width: max(100%, 24px);
+}
+
 /* While the lines show, the strip is only a chevron that folds them. At rest it takes no width, so the title keeps
    its full width. On row hover or focus the chevron takes the place of the row's time, at the right end. */
 [data-role='agents.root'] [data-role='agents.strip.open'] {
