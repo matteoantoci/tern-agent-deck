@@ -58,10 +58,13 @@ t.test("an agent with subagents but none running shows N done in the strip's pla
 	t.eq(visible.bars(out, "Lead"), {})
 end)
 
-t.test("an agent with subagents but none running and none done shows no strip slot, not 0 done", function()
-	local out = view("idle", { sub("A", "aborted"), sub("B", "aborted") })
-	t.eq(visible.agentRows(out), { ":sparkle(Idle) Lead" })
-	t.eq(visible.button(out, "Lead"), nil)
+t.test("an agent with subagents but none running and none done shows N subagents in the strip's place", function()
+	local queued = view("working", { sub("A", "pending"), sub("B", "running", 1, { waiting = true }) })
+	t.eq(visible.agentRows(queued), { ":sparkle(Working) Lead [2 subagents] 0s" })
+	t.eq(visible.bars(queued, "Lead"), {})
+	t.eq(visible.button(queued, "Lead"), "subs=7 open")
+	local stopped = view("idle", { sub("A", "aborted"), sub("B", "aborted"), sub("C", "failed") })
+	t.eq(visible.agentRows(stopped)[1], ":sparkle(Idle) Lead [3 subagents]")
 end)
 
 t.test("an agent with no subagents has no strip", function()
