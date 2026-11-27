@@ -426,23 +426,22 @@
 	color: var(--t3);
 }
 
-/* The chevron that shows or hides the subagent lines. It sits over the row's time slot at the right end and takes
-   no width, so nothing moves: on row hover or focus the time fades out and the chevron fades in. */
+/* The chevron that shows or hides the subagent lines, in the row's time slot at the right end. It stays in the row's
+   flow, with no absolute position and no opacity, because Tern's canvas gives no click to the chevron when it sits
+   over the time that way. At rest it takes no width but stays focusable; on row hover or focus it takes the place of
+   the time. */
 [data-role='agents.root'] [data-role^='agents.toggle.'] {
-	position: absolute;
-	top: 4px;
-	right: 4px;
+	flex: none;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	width: 24px;
+	width: 0;
 	height: 20px;
 	padding: 0;
+	overflow: hidden;
 	border-radius: var(--r-chip);
 	cursor: pointer;
 	color: var(--t3);
-	opacity: 0;
-	transition: opacity 0.15s var(--ease);
 }
 
 [data-role='agents.root'] [data-role^='agents.toggle.']:hover {
@@ -454,16 +453,13 @@
 	color: inherit;
 }
 
-[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):has(> [data-role^='agents.toggle.']) [data-role='agents.time'] {
-	transition: opacity 0.15s var(--ease);
-}
-
 [data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within) > [data-role^='agents.toggle.'] {
-	opacity: 1;
+	width: 24px;
+	margin-left: auto;
 }
 
 [data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within):has(> [data-role^='agents.toggle.']) [data-role='agents.time'] {
-	opacity: 0;
+	display: none;
 }
 
 [data-role='agents.bar.running'] {
