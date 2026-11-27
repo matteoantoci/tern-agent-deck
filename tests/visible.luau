@@ -429,7 +429,7 @@ end
 -- Collects into `out` each color a state dot, state icon or end mark in `n` takes from Tern: a `tone`, or a span style.
 local function collectStateColors(n: Node, out: { string })
 	local p = props(n)
-	if stateOf(p.role) or p.role == "agents.status" then
+	if stateOf(p.role) then
 		if p.tone then
 			table.insert(out, p.role .. " tone=" .. tostring(p.tone))
 		end

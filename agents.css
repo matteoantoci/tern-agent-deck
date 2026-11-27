@@ -428,8 +428,8 @@
 	}
 }
 
-/* A row's time, and the counts and statuses: neutral mono figures at the right end. */
-:is([data-role='agents.time'], [data-role='agents.count'], [data-role='agents.meta']) {
+/* A row's time and the zone and crew counts: neutral mono figures at the right end. */
+:is([data-role='agents.time'], [data-role='agents.meta']) {
 	flex: none;
 	margin-left: auto;
 	font: 400 12px/16px var(--tv-font, var(--mono));
