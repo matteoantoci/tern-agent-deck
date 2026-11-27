@@ -157,18 +157,19 @@ t.test("a card's hover card holds the agent's facts and its last message", funct
 	)
 end)
 
-t.test("the Live tab shows the waiting mark and how many cards need you, also while Recent is open", function()
+t.test("the Live chip is followed by the waiting mark and how many cards need you, also while Recent is open", function()
 	local agents = {
 		agent({ pane = 1, title = "a", state = "waiting_input" }),
 		agent({ pane = 2, title = "b", state = "waiting_input" }),
 		agent({ pane = 7, title = "Lead", state = "working", workingSince = 0 }),
 	}
 	local subs = { [7] = { agents = { sub("Anna", "Ask Why?", 10) }, incomplete = false } }
-	t.eq(visible.chrome(build({ agents = agents, subagents = subs }).view), { "[Live] ■(3 need you) 3 [Recent]" })
-	t.eq(visible.chrome(build({ agents = agents, subagents = subs, view = "recent" }).view), {
-		"[Live] ■(3 need you) 3 [Recent]",
-	})
-	t.eq(visible.chrome(build({ agents = { agents[3] } }).view), { "[Live] [Recent]" })
+	local function chips(input: { [string]: any }): string
+		return visible.chrome(build(input).view)[2]
+	end
+	t.eq(chips({ agents = agents, subagents = subs }), "[:broadcast](Live) ■(3 need you) 3 [:history](Recent)")
+	t.eq(chips({ agents = agents, subagents = subs, view = "recent" }), "[:broadcast](Live) ■(3 need you) 3 [:history](Recent)")
+	t.eq(chips({ agents = { agents[3] } }), "[:broadcast](Live) [:history](Recent)")
 end)
 
 t.test("the status segment counts the working and the waiting agents, pinned ones too, and a click runs the plugin's Next waiting agent", function()

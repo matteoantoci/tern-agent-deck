@@ -285,7 +285,8 @@ function visible.chrome(view: Node): { string }
 	return out
 end
 
--- The first row that shows `text`: a list row, else a row of the head (the Live/Recent switch and the quota line).
+-- The first row that shows `text`: a list row, else a row of the head (the title row, the Live/Recent chips and the
+-- quota line).
 local function findRow(view: Node, text: string): Node
 	for _, inChrome in { false, true } do
 		for _, row in rowNodes(view, inChrome) do
@@ -608,12 +609,12 @@ function visible.press(view: Node, title: string): string?
 	return walk(view)
 end
 
---- The label of the view button drawn as the one shown (role `agents.view.on`), or nil.
+--- The name (`aria`) of the view chip drawn as the one shown (role `agents.view.on`), or nil.
 function visible.shownView(view: Node): string?
 	local function walk(n: Node): string?
 		local p = props(n)
 		if p.role == "agents.view.on" then
-			return p.text
+			return p.aria
 		end
 		for _, child in kids(n) do
 			local found = walk(child)

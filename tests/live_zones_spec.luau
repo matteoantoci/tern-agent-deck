@@ -380,14 +380,18 @@ t.test("the sidebar redraws when a row's time shows another text or an idle agen
 	t.eq(due({ agent({ state = "exited", activeAt = NOW - 30 }) }), nil)
 end)
 
-t.test("the head holds only the Live/Recent switch, Live by default; a click shows the view", function()
+t.test("the head holds a title row and the Live/Recent chips, Live by default; a click shows the view or hides the sidebar", function()
 	local live = view({ agent({}) })
-	t.eq(visible.chrome(live), { "[Live] [Recent]" })
+	t.eq(visible.chrome(live), {
+		":terminal Agents [:sidebar](Hide sidebar (⌥⌘A))",
+		"[:broadcast](Live) [:history](Recent)",
+	})
 	t.eq(visible.shownView(live), "Live")
 	t.eq(visible.shownView(view({ agent({}) }, { view = "recent" })), "Recent")
 	t.eq(visible.find(live, "menu"), nil)
 	t.eq(visible.press(live, "Recent"), "view=recent")
 	t.eq(visible.press(live, "Live"), "view=live")
+	t.eq(visible.press(live, "Hide sidebar (⌥⌘A)"), "toggle-sidebar")
 end)
 
 t.test("a full Live view of 10 agents with open crews and cards fits one canvas update", function()

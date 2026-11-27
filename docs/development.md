@@ -10,7 +10,9 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
 - `agents.css`: the sidebar's look, drawn only with Tern's theme variables (`--t1`..`--t4`, `--l1`..`--l3`, `--live`,
   `--warn`, `--ok`, `--bad`, `--accent`, `--r-chip`, `--r-card`, `--sans`, `--mono`, `--ease`), so that a theme
   recolors it and makes it square or round. It styles nodes by role (Tern draws a node's `role` as `data-role`): the
-  head (`agents.chrome`: the Live/Recent switch and the quota line), the zones (`agents.zone`, `agents.head`, the
+  head (`agents.chrome`: the title row `agents.top` with `agents.heading` and the hide button `agents.hide`, the
+  Live/Recent chips `agents.views` with `agents.view` and the shown `agents.view.on`, and the quota line
+  `agents.quota`), the zones (`agents.zone`, `agents.head`, the
   zone square `agents.square.<state>`), the project labels (`agents.label`, `agents.rule`), the rows by role
   `agents.<kind>.<depth>`, the title icon in its state's color (`agents.glyph.<state>`), the folded subagent strip
   (it takes no click: `agents.strip` with one `agents.bar.running` per running subagent, or `agents.tally`,
@@ -23,7 +25,8 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   `agents.root`) in the sans face and keeps machine strings mono.
 - `window.luau`: the window entry. It registers the palette commands ("Toggle Agents sidebar" with key ⌥⌘A, "New
   tab in the focused agent's folder", "Arrange tabs by project", "Pin this agent", "Next waiting agent"), the event
-  handlers (also the canvas actions: open or close subagent lines, the Older and Earlier folds, the view), the status
+  handlers (also the canvas actions: open or close subagent lines, the Older and Earlier folds, the view, and the
+  head's hide button, `toggle-sidebar`, which runs what the palette command runs), the status
   line and tab title formatters, the 1-second subagent tick and the 1-minute session scan.
 - `lib/sidebar.luau`: the sidebar manager. It reads the agents from Tern, keeps one canvas on the right edge of every
   tab at the shared width (25% of the tab until the user drags it; a copy left on the left edge by an older version

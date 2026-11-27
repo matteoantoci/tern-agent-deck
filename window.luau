@@ -53,7 +53,7 @@ local function scanTick(_cx: WindowCx?)
 	tern.timer(60 * 1000, scanTick)
 end
 
--- Shows or hides the sidebar everywhere: the palette command and its key.
+-- Shows or hides the sidebar everywhere: the palette command, its key and the head's hide button.
 local function toggleSidebar(cx: WindowCx)
 	sidebar.toggle(cx)
 	startTicking()
@@ -257,9 +257,12 @@ tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
 	return true
 end)
 
--- The Live/Recent switch sends `view=live` or `view=recent`.
+-- The Live/Recent chips send `view=live` or `view=recent`; the head's hide button sends `toggle-sidebar`, which does
+-- what the palette command and ⌥⌘A do.
 tern.on("canvas_action", function(ev: CanvasAction, cx: WindowCx): boolean
-	if ev.act == "view" and (ev.value == "live" or ev.value == "recent") then
+	if ev.act == "toggle-sidebar" then
+		toggleSidebar(cx)
+	elseif ev.act == "view" and (ev.value == "live" or ev.value == "recent") then
 		store.setView(ev.value :: viewModel.View)
 		sidebar.refresh(cx)
 		if ev.value == "recent" then

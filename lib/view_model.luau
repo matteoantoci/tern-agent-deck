@@ -132,7 +132,7 @@ export type Input = {
 	--- file; a subagent's hover card names its model from it.
 	routes: { [string]: string }?,
 	--- The current subscription quotas, from omp's `agent.db`; nil when the read failed or gave none. When every account
-	--- of a provider has a quota near or at its limit, one line under the Live/Recent switch says so.
+	--- of a provider has a quota near or at its limit, one line under the Live/Recent chips says so.
 	quotas: { Quota }?,
 	--- What each live omp session cost, by session file, its subagents included; a session that is absent has no cost
 	--- line in its hover card.
@@ -318,8 +318,9 @@ end
 
 local MINUTE, HOUR, DAY = 60, 60 * 60, 24 * 60 * 60
 
--- The roles `agents.css` styles. The root sets the canvas in the sans face; the chrome holds the Live/Recent switch
--- and the quota line (`agents.quota`); the body holds the zones (`agents.zone`), each a head row and its project
+-- The roles `agents.css` styles. The root sets the canvas in the sans face; the chrome holds the title row
+-- (`agents.top`: the agent icon, "Agents" and the button that hides the sidebar), the Live/Recent chips and the quota
+-- line (`agents.quota`); the body holds the zones (`agents.zone`), each a head row and its project
 -- groups (`agents.project`), each a label row and its agent rows. Each list row has the role `agents.<kind>.<depth>`
 -- (see `rowRole`). A row's parts: the title icon in its state's color (`agents.glyph.<state>`), the name (cut with an
 -- ellipsis in CSS, so that Tern adds no tooltip of its own under a row's hover card), the time, and the controls that
@@ -327,6 +328,10 @@ local MINUTE, HOUR, DAY = 60, 60 * 60, 24 * 60 * 60
 local ROLE = {
 	root = "agents.root",
 	chrome = "agents.chrome",
+	--- The head's title row, its "Agents" and its button that hides the sidebar.
+	top = "agents.top",
+	heading = "agents.heading",
+	hide = "agents.hide",
 	views = "agents.views",
 	quota = "agents.quota",
 	view = "agents.view",
@@ -362,7 +367,7 @@ local ROLE = {
 	card = "agents.card",
 	question = "agents.question",
 	footer = "agents.footer",
-	--- The number of Needs you cards after the Live switch.
+	--- The number of Needs you cards after the Live chip.
 	needs = "agents.needs",
 }
 
@@ -1991,14 +1996,17 @@ function viewModel.notice(input: Input, pane: number, what: "waiting" | "done" |
 	return nil
 end
 
--- A button of the Live/Recent switch, drawn as the shown one when it is.
-local function viewButton(label: string, view: View, shown: View): Node
+-- A chip of the Live/Recent strip: an icon with the view's name as its tooltip and accessible name, drawn as the
+-- shown one when it is.
+local function viewChip(icon: string, label: string, view: View, shown: View): Node
 	return {
 		k = "button",
 		p = {
-			text = label,
+			icon = icon,
 			size = "sm",
 			variant = "quiet",
+			title = label,
+			aria = label,
 			role = if view == shown then ROLE.viewOn else ROLE.view,
 			actions = { click = "view=" .. view },
 		},
@@ -2018,7 +2026,7 @@ local function quotaText(quota: Quota, left: number, named: boolean): (string, s
 	return table.concat(parts, " · "), "· resets " .. reset
 end
 
--- The quota line under the Live/Recent switch, while a provider is at risk (see `quotaReport`): the account with the
+-- The quota line under the Live/Recent chips, while a provider is at risk (see `quotaReport`): the account with the
 -- most room of the worst provider at risk, with its worst limit, after a square in the warning or the error color,
 -- then "+N" for the other providers at risk. The tooltip lists every limit near or at its limit, of every account.
 -- Nil while no provider is at risk. When the line is too narrow, its reset is the part cut first.
@@ -2053,18 +2061,36 @@ local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	}
 end
 
--- The head: the Live/Recent switch, with the waiting mark and the number of Needs you cards after Live while any
--- shows (in both views), and under it the quota line while a provider is at risk (see `quotaReport`). What the old ⋯
--- menu did stays in the palette commands.
+-- The head, as Tern's own panel heads: the title row (the agent icon, "Agents" and the button that hides the
+-- sidebar, as the palette command and ⌥⌘A do), then the Live/Recent chips, with the waiting mark and the number of
+-- Needs you cards after Live while any shows (in both views), and under them the quota line while a provider is at
+-- risk (see `quotaReport`). What the old ⋯ menu did stays in the palette commands.
 local function chrome(view: View, input: Input, needs: number): Node
-	local views: { Node } = { viewButton("Live", "live", view) }
+	local hide: Node = {
+		k = "button",
+		p = {
+			icon = "sidebar",
+			size = "sm",
+			variant = "quiet",
+			title = "Hide sidebar (⌥⌘A)",
+			role = ROLE.hide,
+			actions = { click = "toggle-sidebar" },
+		},
+	}
+	local title: { Node } = {
+		{ k = "icon", p = { name = AGENT_ICON, role = ROLE.icon } },
+		{ k = "text", p = { text = "Agents", wrap = "none", grow = 1, role = ROLE.heading } },
+		hide,
+	}
+	local top: Node = { k = "row", p = { key = "top", role = ROLE.top, gap = "none" }, c = title }
+	local views: { Node } = { viewChip("broadcast", "Live", "live", view) }
 	if needs > 0 then
 		local label = tostring(needs) .. " need you"
 		table.insert(views, squareNode("waiting", label))
 		table.insert(views, { k = "text", p = { text = tostring(needs), wrap = "none", role = ROLE.needs } })
 	end
-	table.insert(views, viewButton("Recent", "recent", view))
-	local children: { Node } = { { k = "row", p = { key = "views", role = ROLE.views, gap = "none" }, c = views } }
+	table.insert(views, viewChip("history", "Recent", "recent", view))
+	local children: { Node } = { top, { k = "row", p = { key = "views", role = ROLE.views, gap = "none" }, c = views } }
 	local quota = quotaLine(input.quotas, input.time)
 	if quota then
 		table.insert(children, quota)

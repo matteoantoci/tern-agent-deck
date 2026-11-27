@@ -15,7 +15,7 @@ All your coding agents in one sidebar, in every Tern tab.
 - 🌳 **Subagents at every depth.** Under each agent, its subagent lines show by default: one line for each running, waiting, queued or failed subagent, with its state, its name, what it does now and its time. The lines keep the tree order (each subagent under the one that runs it, siblings in start order), so a line does not move when its state changes. Point at the row and click the chevron in place of the time to hide or show them. Click a line to open that subagent in omp. A failed subagent always shows. A finished subagent gets no line: the hover card counts it.
 - 🪪 **Hover card.** Point at a row to see its state, tab, title, summary, model, effort, cost and subagent counts.
 - 💲 **Cost.** The hover card shows what a session cost, its subagents included: money spent through API keys, and subscription use at API prices (not billed).
-- ⏳ **Quota.** When every account of a provider is near its quota limit or at it, one line under the Live/Recent switch tells you which one and when it resets.
+- ⏳ **Quota.** When every account of a provider is near its quota limit or at it, one line under the Live and Recent chips tells you which one and when it resets.
 - 📌 **Pins.** Pin the chats that matter. Pins stay after a restart, and a stopped pin resumes with one click.
 - 🕘 **History.** The Recent view lists your closed omp sessions by day (Today, Yesterday, This week, Earlier), then by project. One click resumes a session in a new tab.
 - ➕ **New tab in a project.** The `+` on a project label opens a new tab there. It follows Tern's "New tabs and splits open" setting: a shell or your agent command.
@@ -37,7 +37,7 @@ Requirements:
 
 ## 🖱️ Usage
 
-The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hide it everywhere.
+The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hide it everywhere. Its head reads as Tern's own panel heads: **Agents** with a button at the right that hides the sidebar, then the Live and Recent chips.
 
 ### Clicks
 
@@ -53,7 +53,8 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | A session row (Recent) | Resumes the session in a new tab with `omp --resume`. |
 | **Earlier** (Recent) | Shows or hides the sessions from before this week. |
 | The status line segment | Focuses the agent that has waited longest. |
-| The Live and Recent buttons | Switch the view. |
+| The Live and Recent chips under **Agents** | Switch the view. The waiting mark and the number of Needs you cards follow Live. |
+| The sidebar button at the right of **Agents** | Hides the sidebar everywhere, as ⌥⌘A does. |
 
 The accent color marks only this tab's agent (with its open subagent lines, or the closed **Older than a day** line that holds it) and keyboard focus.
 
