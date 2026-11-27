@@ -35,7 +35,7 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   live here, in the store, in the three readers and in the entry. It keeps the `hidden` flag and the shared `width`
   in `tern.kv`.
 - `lib/store.luau`: the state in `tern.kv` that every window shares and a restart keeps: the pins, the view the strip
-  shows (Live or Recent), the open subagent lines of each agent (`subs-open`), the Older and Earlier folds
+  shows (Live or Recent), the agents whose subagent lines the user closed (`subs-closed`), the Older and Earlier folds
   (`older-open`, `earlier-open`), when each agent was last in a turn and when each working agent began its turn (so
   that a plugin reload does not reset the timers). Once per VM it removes the keys the sidebar no longer uses.
 - `lib/turns.luau`: the pure turn starts: records a start when an agent enters `working` and drops it when the turn
@@ -93,11 +93,13 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
 - `lib/effort.luau`: the pure helper for it: finds the `effort` node with role `omp.composer.model.effort`. No
   `if … then … else` expression either.
 - `lib/view_model.luau`: the pure view model. Plain data in (the agents with their reported session files, their
-  subagents, the pins, the view, the open subagent lines, the Older and Earlier folds, the omp sessions, the cost of
+  subagents, the pins, the view, the closed subagent lines, the Older and Earlier folds, the omp sessions, the cost of
   each session file, the quotas and the time); out: the canvas node tree, the status line segments, the waiting
   agents in wait order, the toast text and `redrawDue` (the milliseconds until a shown time or a quota's reset text
   changes). The Live tree is the zones Needs you (cards, longest wait first), Working and Idle (agents under project
-  labels, idle agents older than a day folded); the Recent tree is days (Today, Yesterday, This week, Earlier) with
+  labels by name, the pins first in pin order, then the others in start order, so that times and the focus move no row;
+  idle agents older than a day folded, but for the pins; subagent lines open by default, in tree order); the Recent
+  tree is days (Today, Yesterday, This week, Earlier) with
   project labels. Each row carries its hover card (state, tab, title, summary, facts, cost lines, subagent counts,
   hint) and its right-click menu. It also names each tab after its main agent. It uses no `tern` global, so the plain
   `luau` CLI can load it.

@@ -9,10 +9,10 @@ All your coding agents in one sidebar, in every Tern tab.
 ## ✨ Features
 
 - 🚦 **Zones.** The Live view shows three zones in a fixed order: **Needs you**, **Working** and **Idle**. A zone with no agents does not show.
-- 📁 **Agents by project.** Inside each zone, agents show under a light project label: the git repo, or the folder outside a repo. Worktrees and ovnfs checkouts go under their main repo.
+- 📁 **Agents by project.** Inside each zone, agents show under a light project label: the git repo, or the folder outside a repo. Worktrees and ovnfs checkouts go under their main repo. Projects sort by name in every zone. Inside a project, pinned agents come first in the order you pinned them, then the other agents in the order they started. Turn times and focus never move a row: a row moves only when its agent goes to another zone.
 - 🔔 **Needs you.** Each waiting agent is a card with its question (2 lines), its wait time and its project and tab, longest wait first. A waiting subagent gets its own card. The Live button shows how many agents need you. A status line segment counts the agents that work and wait, and a toast tells you when an agent off screen waits or finishes.
 - ➖ **Quiet rows.** Each agent is one line: omp's title icon in the color of its state, the title, a strip with one bar per running subagent, and one time (turn timer, wait time or age).
-- 🌳 **Subagents at every depth.** Click an agent's strip to show its subagent lines: one line for each running, waiting, queued or failed subagent, with its state, its name, what it does now and its time. Click a line to open that subagent in omp. A failed subagent always shows. A finished subagent gets no line: the hover card counts it.
+- 🌳 **Subagents at every depth.** Under each agent, its subagent lines show by default: one line for each running, waiting, queued or failed subagent, with its state, its name, what it does now and its time. The lines keep the tree order (each subagent under the one that runs it, siblings in start order), so a line does not move when its state changes. Click the strip to hide or show them. Click a line to open that subagent in omp. A failed subagent always shows. A finished subagent gets no line: the hover card counts it.
 - 🪪 **Hover card.** Point at a row to see its state, tab, title, summary, model, effort, cost and subagent counts.
 - 💲 **Cost.** The hover card shows what a session cost, its subagents included: money spent through API keys, and subscription use at API prices (not billed).
 - ⏳ **Quota.** When every account of a provider is near its quota limit or at it, one line under the Live/Recent switch tells you which one and when it resets.
@@ -46,16 +46,16 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | An agent row | Focuses that agent. It switches the session or brings a parked pane back. If omp shows a subagent, omp goes back to the main session. |
 | A Needs you card | Goes to that agent so that you can answer, or shows that subagent in omp. |
 | A pinned agent that stopped | Resumes its session in a new tab with `omp --resume`. The pin moves to the resumed agent. |
-| The subagent strip after an agent's title (its bars, or **N subagents** while none runs but some wait or are queued) | Shows or hides that agent's subagent lines. This tab's agent starts with them shown. When every subagent finished, the strip does not show. |
+| The subagent strip after an agent's title (its bars, or **N subagents** while none runs but some wait or are queued) | Shows or hides that agent's subagent lines. Every agent starts with them shown, and the lines you hide stay hidden. When every subagent finished, the strip does not show. |
 | A subagent line | Opens that subagent in omp's view. |
 | `+` on a project label | Opens a new tab in that project. |
-| **Older than a day** | Shows or hides the idle agents whose last turn ended more than 1 day ago. Pins and this tab's agent always show. |
+| **Older than a day** | Shows or hides the idle agents whose last turn ended more than 1 day ago. Pins always show. When this tab's agent is under the closed line, the line carries the accent. |
 | A session row (Recent) | Resumes the session in a new tab with `omp --resume`. |
 | **Earlier** (Recent) | Shows or hides the sessions from before this week. |
 | The status line segment | Focuses the agent that has waited longest. |
 | The Live and Recent buttons | Switch the view. |
 
-The accent color marks only this tab's agent (with its open subagent lines) and keyboard focus.
+The accent color marks only this tab's agent (with its open subagent lines, or the closed **Older than a day** line that holds it) and keyboard focus.
 
 ### Hover card
 
@@ -102,7 +102,7 @@ Rename is available for running omp agents. It is off while omp shows a subagent
 - It finds closed sessions in `~/.omp/agent/sessions`, and the session file of each live agent in `tern inspect --json`.
 - It reads omp's `~/.omp/agent/agent.db` with `sqlite3 -readonly`, with each session scan (at most once a minute). Two queries only read: the latest use of each subscription quota (no account key), and the `id`, `provider` and `credential_type` of each credential (no secret). The plugin never writes the database.
 - It reads the cost incrementally. For each live omp session, it lists the session file and its subagents' files, and reads only the bytes that each file added since the last read: the `usage.cost.total` and the `credentialId` of each assistant message. `api_key` credentials add to the money spent, `oauth` credentials to subscription use. The first read of a long session takes about 1 second, off the UI thread. A failed read shows no cost.
-- It keeps pins, folds, open subagent lines, the view and the width in `tern.kv`. All windows share this state.
+- It keeps pins, folds, hidden subagent lines, the view and the width in `tern.kv`. All windows share this state.
 - It runs local commands only, with one exception: a long last message of an agent (up to 8,000 bytes) goes to the model of omp's `@smol` role, through omp, for the summary in the row's card. That model's provider receives the text.
 
 ## 🧭 Limitations

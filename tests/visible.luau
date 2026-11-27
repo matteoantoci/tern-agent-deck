@@ -335,6 +335,37 @@ function visible.selected(view: Node): { string }
 	return out
 end
 
+--- The rows drawn with this tab's accent (a light accent fill and a bar at the left), one line each: the selected
+--- agent row, the first row of a block drawn with the accent (an agent with its subagent lines), and the closed
+--- "Older than a day" line while this tab's agent sits under it.
+function visible.accented(view: Node): { string }
+	local out: { string } = {}
+	local function walk(n: Node)
+		if isChrome(n) then
+			return
+		end
+		local role = props(n).role
+		if role == "agents.mine" then
+			local rows = rowNodes(n)
+			if rows[1] then
+				table.insert(out, line(rows[1]))
+			end
+			return
+		end
+		if n.k == "row" and not hasRow(n) then
+			if role == "agents.on.0" then
+				table.insert(out, line(n))
+			end
+			return
+		end
+		for _, child in kids(n) do
+			walk(child)
+		end
+	end
+	walk(view)
+	return out
+end
+
 -- The span styles that `agents.css` keeps in the mono face; every other text of the canvas is sans.
 local MONO_STYLES = { "path", "mono", "num", "code", "key" }
 

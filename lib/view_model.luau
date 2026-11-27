@@ -114,17 +114,16 @@ export type Input = {
 	pins: { Pin }?,
 	--- Whether the Idle zone shows its agents that idled for a day or more ("Older than a day" is open).
 	olderOpen: boolean?,
-	--- Whether each agent's subagent lines are open, by pane. An agent the user did not choose one for has them open
-	--- while it is this tab's agent, and closed otherwise.
-	subsOpen: { [number]: boolean }?,
+	--- The panes whose subagent lines the user closed. Every other agent has them open.
+	subsClosed: { [number]: boolean }?,
 	--- The omp sessions the reader found, in any order; nil before the first read.
 	sessions: { Session }?,
 	--- Whether the Recent view shows its sessions from before this week ("Earlier" is open).
 	earlierOpen: boolean?,
 	--- The view the strip shows chosen; Live when nil.
 	view: View?,
-	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent, and its
-	--- project comes first in every zone.
+	--- The pane the user last focused outside the sidebar: this tab's agent. Its row is drawn with the accent (the
+	--- closed "Older than a day" line, while it sits under it); it moves no row.
 	focused: number?,
 	--- The omp id of the subagent each pane's omp shows in its view ("Viewing <name>"), by pane: while the focused
 	--- pane shows one, that subagent's row is drawn selected instead of its agent's.
@@ -186,8 +185,8 @@ type Shared = {
 	viewing: { [number]: string },
 	--- The model (`provider/model`) of each session file the reader read, by file.
 	routes: { [string]: string },
-	--- Whether each agent's subagent lines are open, by pane, as the user chose; nil when the user chose none.
-	subsOpen: { [number]: boolean },
+	--- The panes whose subagent lines the user closed.
+	subsClosed: { [number]: boolean },
 	--- What each live omp session cost, by session file.
 	cost: { [string]: Cost },
 	--- How many more subagent lines the view can draw (see `VIEW_SUB_LINES`); each agent's lines take from it.
@@ -1215,7 +1214,7 @@ local VIEW_SUB_LINES = 100
 
 -- The subagents of `subs` that get a line (see `lined`), at most `limit`: first the one the pane shows, then the
 -- failed ones (a failure never hides), then the newest of the others (running, waiting, queued). Also how many get
--- none.
+-- none. The rank only picks the lines that stay: they draw in tree order.
 local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
 	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
 	for index, sub in subs.agents do
@@ -1243,12 +1242,15 @@ local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: numbe
 	return drawn, math.max(0, #candidates - limit)
 end
 
--- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
--- down per nesting level: every one not finished while the lines are open (`agents.strip.open`), else only the
--- failed ones (a failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES`
--- (see `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
--- subagents sit past the levels omp renders. With no strip (every subagent finished), the lines are closed. This
--- tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
+-- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents in tree
+-- order (each one after the one it runs under, siblings in the order the tray gives), one step down per nesting level:
+-- every one not finished while the lines are open (`agents.strip.open`), else only the failed ones (a failure never
+-- hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see `drawnSubs`), then a muted
+-- "+N more" line. A warning line says when Tern cut the read, and one that +N running subagents sit past the levels
+-- omp renders. The lines are open for every agent until the user closes them (`subsClosed`), so that no line moves
+-- when its state, the focus or the subagent omp shows changes. With no strip (no subagent runs, waits or is queued),
+-- nothing can hide the lines that are left. This tab's agent, and its open lines, are one block, which `agents.css`
+-- draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1256,23 +1258,19 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local pane = string.format("%.0f", agent.pane)
 	local crew = count(subs)
 	local main = row(agent, shared, pinned, depth, crewText(crew))
-	local chosen = shared.subsOpen[agent.pane]
-	-- This tab's agent shows its lines open by default only while a subagent runs or waits on the user.
-	local busy = crew.running + crew.waiting > 0
-	local open = if chosen ~= nil then chosen else shared.focused == agent.pane and busy
+	local open = not shared.subsClosed[agent.pane]
 	-- The strip goes right after the name, before the time.
 	local strip = stripNode(pane, crew, open)
 	if strip then
 		table.insert(main.c :: { Node }, 3, strip)
 	else
-		open = false
+		-- Only the failed lines and the shown one are left, and they keep their places in the tree.
+		open = true
 	end
 	local lines: { Node } = { main }
-	local failed: { Node } = {}
 	local deeper = 0
-	-- The subagent omp shows in the pane keeps its line, finished or not: under the open strip, with no strip under
-	-- the row without a toggle, and under a closed strip as a flat line like a failure. In the focused pane it takes
-	-- the selection from its agent's row.
+	-- The subagent omp shows in the pane keeps its line, finished or not: in the tree under open lines, and as a flat
+	-- line like a failure under a closed strip. In the focused pane it takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
 	local drawn, past = drawnSubs(subs, viewed, math.min(SUB_LINES, shared.subLines))
@@ -1282,8 +1280,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 				deeper += 1
 			end
 		elseif drawn[sub] then
-			local keptLine = viewing.shows(sub, viewed)
-			if open or keptLine or sub.status == "failed" then
+			if open or viewing.shows(sub, viewed) or sub.status == "failed" then
 				local selected = viewing.shows(sub, shown)
 				if selected then
 					(main.p :: { [string]: any }).role = rowRole("item", depth)
@@ -1291,10 +1288,8 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 				local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 				-- A closed strip still shows a failure and the shown line one step under its agent as a flat line:
 				-- its depth means nothing there.
-				local inTree = open or (keptLine and not strip)
-				local at = if inTree then depth + sub.depth else depth + 1
-				local line = subLine(sub, pane, agent.sessionFile, at, selected, frozen, shared)
-				table.insert(if inTree then lines else failed, line)
+				local at = if open then depth + sub.depth else depth + 1
+				table.insert(lines, subLine(sub, pane, agent.sessionFile, at, selected, frozen, shared))
 				shared.subLines -= 1
 			end
 		end
@@ -1312,9 +1307,6 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			table.insert(lines, infoLine("subs-incomplete", iconNode("warn", "warning"), text, "warning", depth + 1))
 		end
 	end
-	for _, line in failed do
-		table.insert(lines, line)
-	end
 	if #lines == 1 then
 		return main
 	end
@@ -1325,8 +1317,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	return { k = "col", p = p, c = lines }
 end
 
--- An idle agent whose last turn ended this long ago (in seconds) folds into "Older than a day", unless it is pinned
--- or this tab's agent.
+-- An idle agent whose last turn ended this long ago (in seconds) folds into "Older than a day", unless it is pinned.
 local OLDER_AFTER = DAY
 
 local function isOlder(agent: Agent, time: number?): boolean
@@ -1544,8 +1535,7 @@ function viewModel.redrawDue(input: Input): number?
 			soon(untilChange(math.max(0, input.now - (agent.workingSince or input.now))))
 		elseif time and activeAt and (agent.state ~= "exited" or pinned[agent.pane]) then
 			soon(untilChange(math.max(0, time - activeAt) * 1000))
-			local exempt = pinned[agent.pane] or agent.pane == input.focused
-			if agent.state == "idle" and not exempt and not isOlder(agent, time) then
+			if agent.state == "idle" and not pinned[agent.pane] and not isOlder(agent, time) then
 				soon((activeAt + OLDER_AFTER - time) * 1000)
 			end
 		end
@@ -1907,7 +1897,7 @@ local function context(input: Input): Shared
 		viewing = input.viewing or {},
 		routes = input.routes or {},
 		cost = input.cost or {},
-		subsOpen = input.subsOpen or {},
+		subsClosed = input.subsClosed or {},
 		subLines = VIEW_SUB_LINES,
 	}
 	for _, agent in input.agents do
@@ -2070,12 +2060,11 @@ local function projectGroups(
 end
 
 -- The Live view: the zones Needs you (`cards`, the one that has waited longest first), Working and Idle,
--- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, in one project
--- order for every zone: this tab's project first, then by name. Inside a project, this tab's agent comes first, then
--- the pinned agents in pin order, then the others: in Working, the longest turn first; in Idle, the newest turn
--- first and the stopped pins last. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended
--- a day ago or more, but for the pinned ones and this tab's, fold under "Older than a day". A calm line shows while
--- no zone does.
+-- in that order, each hidden while empty. Inside Working and Idle, the agents group by project, the projects by name
+-- in every zone (see `groups`). Inside a project, the pinned agents come first in pin
+-- order, then the others in start order, and in Idle the stopped pins last; turn times, states and the focus never
+-- move a row. A pinned agent that stopped shows in Idle. The idle agents whose last turn ended a day ago or more,
+-- but for the pinned ones, fold under "Older than a day". A calm line shows while no zone does.
 local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { Node }
 	local subs = input.subagents or {}
 	local pins: { Pin } = input.pins or {}
@@ -2098,8 +2087,7 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 			table.insert(working, agent)
 			table.insert(shown, agent)
 		elseif agent.state == "idle" then
-			local exempt = pinned[agent.pane] or agent.pane == shared.focused
-			table.insert(if not exempt and isOlder(agent, input.time) then older else idle, agent)
+			table.insert(if not pinned[agent.pane] and isOlder(agent, input.time) then older else idle, agent)
 			table.insert(shown, agent)
 		end
 	end
@@ -2124,55 +2112,18 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 		end
 	end
 
-	-- One project order for every zone: this tab's project first, then the order of `groups` (by name).
+	-- One project order for every zone: by name (see `groups`).
 	local order = viewModel.groups(shown, input.home)
-	for _, agent in input.agents do
-		if agent.pane == shared.focused and agent.state ~= "exited" then
-			local mine = folderOf(agent)
-			for i, group in order do
-				if group.folder == mine then
-					table.insert(order, 1, table.remove(order, i) :: Group)
-					break
-				end
-			end
-		end
-	end
 
-	-- This tab's agent first, then the pins in pin order, then the others.
-	local function rank(a: Agent, b: Agent): boolean?
-		local ma, mb = a.pane == shared.focused and a.state ~= "exited", b.pane == shared.focused and b.state ~= "exited"
-		if ma ~= mb then
-			return ma
-		end
-		local pa, pb = pinIndex[a] or math.huge, pinIndex[b] or math.huge
-		if pa ~= pb then
-			return pa < pb
-		end
-		return nil
-	end
-	local function longestTurn(a: Agent, b: Agent): boolean
-		local ranked = rank(a, b)
-		if ranked ~= nil then
-			return ranked
-		end
-		local sa, sb = a.workingSince or shared.now, b.workingSince or shared.now
-		if sa ~= sb then
-			return sa < sb
-		end
-		return a.pane < b.pane
-	end
-	local function newestTurn(a: Agent, b: Agent): boolean
+	-- The stopped pins last, then the pins in pin order, then the others in start order.
+	local function before(a: Agent, b: Agent): boolean
 		local xa, xb = a.state == "exited", b.state == "exited"
 		if xa ~= xb then
 			return xb
 		end
-		local ranked = rank(a, b)
-		if ranked ~= nil then
-			return ranked
-		end
-		local ta, tb = a.activeAt or math.huge, b.activeAt or math.huge
-		if ta ~= tb then
-			return ta > tb
+		local pa, pb = pinIndex[a] or math.huge, pinIndex[b] or math.huge
+		if pa ~= pb then
+			return pa < pb
 		end
 		return a.pane < b.pane
 	end
@@ -2205,16 +2156,26 @@ local function liveBody(input: Input, shared: Shared, cards: { NeedsCard }): { N
 		table.insert(children, zone("zone-needs", "waiting", "Needs you", tostring(#cards), nodes))
 	end
 	if #working > 0 then
-		local body = projectGroups(order, working, longestTurn, render, input.home)
+		local body = projectGroups(order, working, before, render, input.home)
 		table.insert(children, zone("zone-working", "working", "Working", #working .. " busy", body))
 	end
 	if #idle + #older > 0 then
-		local body = projectGroups(order, idle, newestTurn, render, input.home)
+		local body = projectGroups(order, idle, before, render, input.home)
 		if #older > 0 then
 			local open = input.olderOpen == true
-			table.insert(body, foldRow("older", "Older than a day", #older, open, "older", 0))
+			local fold = foldRow("older", "Older than a day", #older, open, "older", 0)
+			-- A closed fold that holds this tab's agent carries the accent in its place, so that a selection always
+			-- shows.
+			local holdsMine = false
+			for _, agent in older do
+				holdsMine = holdsMine or agent.pane == shared.focused
+			end
+			if holdsMine and not open then
+				fold = { k = "col", p = { key = "older-mine", role = ROLE.mine, gap = "none" }, c = { fold } }
+			end
+			table.insert(body, fold)
 			if open then
-				local groups = projectGroups(order, older, newestTurn, render, input.home)
+				local groups = projectGroups(order, older, before, render, input.home)
 				table.insert(body, { k = "col", p = { key = "older-list", role = ROLE.older, gap = "none" }, c = groups })
 			end
 		end

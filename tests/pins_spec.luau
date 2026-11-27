@@ -49,7 +49,6 @@ t.test("a pinned working agent keeps its subagent rows", function()
 	t.eq(visible.zone(view({
 		agents = { agent({ pane = 7, title = "Lead", state = "working", workingSince = 0 }) },
 		pins = { { pane = 7, cwd = REPO, title = "Lead" } },
-		subsOpen = { [7] = true },
 		subagents = { [7] = { agents = { { id = "dx.A", name = "A", status = "running", depth = 1 } }, incomplete = false } },
 	}), "Working"), { LABEL, ":terminal(Working) Lead [▮] 0s", "■(Running) A" })
 end)

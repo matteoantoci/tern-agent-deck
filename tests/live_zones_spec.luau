@@ -93,7 +93,7 @@ t.test("a worktree groups under its main repo", function()
 	}), "Idle"), { DECK_LABEL, ICON .. "(Idle) main", ICON .. "(Idle) tree" })
 end)
 
-t.test("every zone uses one project order: this tab's project first, then by name", function()
+t.test("every zone orders its projects by name, whatever the focus", function()
 	local agents = {
 		agent({ pane = 1, state = "working", title = ICON .. " deck busy" }),
 		agent({ pane = 2, state = "working", title = ICON .. " pi busy", cwd = PI, repo = PI }),
@@ -101,22 +101,20 @@ t.test("every zone uses one project order: this tab's project first, then by nam
 		agent({ pane = 4, title = ICON .. " pi idle", cwd = PI, repo = PI }),
 		agent({ pane = 5, title = ICON .. " zeta idle", cwd = "/Users/me/zeta", repo = "/Users/me/zeta" }),
 	}
-	local byName = view(agents)
-	t.eq(visible.zone(byName, "Working"), { PI_LABEL, ICON .. "(Working) pi busy 0s", DECK_LABEL, ICON .. "(Working) deck busy 0s" })
-	t.eq(visible.zone(byName, "Idle")[1], PI_LABEL)
-	local mine = view(agents, { focused = 5 })
-	t.eq(visible.zone(mine, "Working"), { PI_LABEL, ICON .. "(Working) pi busy 0s", DECK_LABEL, ICON .. "(Working) deck busy 0s" })
-	t.eq(visible.zone(mine, "Idle"), {
-		"zeta [:plus](New tab in this repo)",
-		ICON .. "(Idle) zeta idle",
+	local working = { PI_LABEL, ICON .. "(Working) pi busy 0s", DECK_LABEL, ICON .. "(Working) deck busy 0s" }
+	local idle = {
 		PI_LABEL,
 		ICON .. "(Idle) pi idle",
 		DECK_LABEL,
 		ICON .. "(Idle) deck idle",
-	})
-	local deck = view(agents, { focused = 3 })
-	t.eq(visible.zone(deck, "Working")[1], DECK_LABEL)
-	t.eq(visible.zone(deck, "Idle")[1], DECK_LABEL)
+		"zeta [:plus](New tab in this repo)",
+		ICON .. "(Idle) zeta idle",
+	}
+	for _, extra in { {}, { focused = 1 }, { focused = 3 }, { focused = 5 } } do
+		local out = view(agents, extra)
+		t.eq(visible.zone(out, "Working"), working)
+		t.eq(visible.zone(out, "Idle"), idle)
+	end
 end)
 
 t.test("a project label's + asks for a new tab in that project, and its hover card gives the short path", function()
@@ -141,7 +139,8 @@ t.test("the time shows in one format, the largest whole unit: 45s, 4m, 3h, 2d", 
 	t.eq(shown(45), ICON .. "(Idle) Fix login 45s")
 	t.eq(shown(4 * 60 + 59), ICON .. "(Idle) Fix login 4m")
 	t.eq(shown(3 * 3600 + 59 * 60), ICON .. "(Idle) Fix login 3h")
-	t.eq(visible.agentRows(view({ agent({ activeAt = NOW - 2 * DAY - 5 }) }, { focused = 1 }))[1], ICON .. "(Idle) Fix login 2d")
+	local old = visible.agentRows(view({ agent({ activeAt = NOW - 2 * DAY - 5 }) }, { olderOpen = true }))
+	t.eq(old[#old], ICON .. "(Idle) Fix login 2d")
 end)
 
 t.test("a working agent's time is its turn timer; a waiting agent's is its wait", function()
@@ -201,47 +200,79 @@ t.test("a click on a row focuses its agent, and its right-click menu is unchange
 	})
 end)
 
-t.test("this tab's agent is drawn selected, and comes first in its zone and project", function()
-	local out = view({
-		agent({ pane = 1, title = ICON .. " older", activeAt = NOW - 60 }),
-		agent({ pane = 2, title = ICON .. " newer", activeAt = NOW - 30 }),
+t.test("this tab's agent is drawn selected and keeps its place in its zone and project", function()
+	local agents = {
+		agent({ pane = 1, title = ICON .. " first", activeAt = NOW - 60 }),
+		agent({ pane = 2, title = ICON .. " second", activeAt = NOW - 30 }),
 		agent({ pane = 3, title = ICON .. " mine", activeAt = NOW - 3600 }),
-	}, { focused = 3 })
+	}
+	local out = view(agents, { focused = 3 })
 	t.eq(visible.selected(out), { ICON .. "(Idle) mine 1h" })
-	t.eq(visible.zone(out, "Idle"), { DECK_LABEL, ICON .. "(Idle) mine 1h", ICON .. "(Idle) newer 30s", ICON .. "(Idle) older 1m" })
+	local order = { DECK_LABEL, ICON .. "(Idle) first 1m", ICON .. "(Idle) second 30s", ICON .. "(Idle) mine 1h" }
+	t.eq(visible.zone(out, "Idle"), order)
+	t.eq(visible.zone(view(agents, { focused = 1 }), "Idle"), order)
+	t.eq(visible.zone(view(agents), "Idle"), order)
 end)
 
-t.test("in Working, the longest turn comes first; in Idle, the newest turn", function()
-	local out = view({
-		agent({ pane = 1, state = "working", title = ICON .. " late", workingSince = 50_000 }),
-		agent({ pane = 2, state = "working", title = ICON .. " early", workingSince = 10_000 }),
-		agent({ pane = 3, title = ICON .. " stale", activeAt = NOW - 7200 }),
-		agent({ pane = 4, title = ICON .. " fresh", activeAt = NOW - 60 }),
-	}, { now = 70_000 })
-	t.eq(visible.zone(out, "Working"), { DECK_LABEL, ICON .. "(Working) early 1m", ICON .. "(Working) late 20s" })
-	t.eq(visible.zone(out, "Idle"), { DECK_LABEL, ICON .. "(Idle) fresh 1m", ICON .. "(Idle) stale 2h" })
+t.test("inside a zone and project, agents keep their start order whatever their turn times", function()
+	local function zones(early: number, late: number, fresh: number, stale: number): ({ string }, { string })
+		local out = view({
+			agent({ pane = 1, state = "working", title = ICON .. " one", workingSince = early }),
+			agent({ pane = 2, state = "working", title = ICON .. " two", workingSince = late }),
+			agent({ pane = 3, title = ICON .. " three", activeAt = NOW - fresh }),
+			agent({ pane = 4, title = ICON .. " four", activeAt = NOW - stale }),
+		}, { now = 70_000 })
+		local working, idle = {}, {}
+		for _, line in visible.zone(out, "Working") do
+			table.insert(working, (string.gsub(line, " %d+%a$", "")))
+		end
+		for _, line in visible.zone(out, "Idle") do
+			table.insert(idle, (string.gsub(line, " %d+%a$", "")))
+		end
+		return working, idle
+	end
+	local working, idle = zones(10_000, 50_000, 60, 7200)
+	t.eq(working, { DECK_LABEL, ICON .. "(Working) one", ICON .. "(Working) two" })
+	t.eq(idle, { DECK_LABEL, ICON .. "(Idle) three", ICON .. "(Idle) four" })
+	local swappedWorking, swappedIdle = zones(50_000, 10_000, 7200, 60)
+	t.eq(swappedWorking, working)
+	t.eq(swappedIdle, idle)
 end)
 
-t.test("pinned agents come first in their zone and project, in the order they were pinned, after this tab's agent", function()
-	local out = view({
+t.test("an agent that leaves a zone and comes back takes its old place", function()
+	local function idle(state: string): { string }
+		return visible.zone(view({
+			agent({ pane = 1, title = ICON .. " one" }),
+			agent({ pane = 2, state = state, title = ICON .. " two" }),
+			agent({ pane = 3, title = ICON .. " three" }),
+		}), "Idle")
+	end
+	local before = idle("idle")
+	t.eq(before, { DECK_LABEL, ICON .. "(Idle) one", ICON .. "(Idle) two", ICON .. "(Idle) three" })
+	t.eq(idle("working"), { DECK_LABEL, ICON .. "(Idle) one", ICON .. "(Idle) three" })
+	t.eq(idle("idle"), before)
+end)
+
+t.test("pinned agents come first in their zone and project, in the order they were pinned, whatever the focus", function()
+	local agents = {
 		agent({ pane = 1, title = ICON .. " plain", activeAt = NOW - 10 }),
 		agent({ pane = 2, title = ICON .. " second pin", activeAt = NOW - 300 }),
 		agent({ pane = 3, title = ICON .. " first pin", activeAt = NOW - 900 }),
 		agent({ pane = 4, title = ICON .. " mine", activeAt = NOW - 5000 }),
-	}, {
-		focused = 4,
-		pins = {
-			{ pane = 3, cwd = DECK, title = ICON .. " first pin" },
-			{ pane = 2, cwd = DECK, title = ICON .. " second pin" },
-		},
-	})
-	t.eq(visible.zone(out, "Idle"), {
+	}
+	local pins = {
+		{ pane = 3, cwd = DECK, title = ICON .. " first pin" },
+		{ pane = 2, cwd = DECK, title = ICON .. " second pin" },
+	}
+	local order = {
 		DECK_LABEL,
-		ICON .. "(Idle) mine 1h",
 		ICON .. "(Idle) first pin 15m",
 		ICON .. "(Idle) second pin 5m",
 		ICON .. "(Idle) plain 10s",
-	})
+		ICON .. "(Idle) mine 1h",
+	}
+	t.eq(visible.zone(view(agents, { focused = 4, pins = pins }), "Idle"), order)
+	t.eq(visible.zone(view(agents, { focused = 1, pins = pins }), "Idle"), order)
 end)
 
 t.test("a pinned agent that stopped is one line in Idle under its project, with a resume icon on hover", function()
@@ -281,7 +312,7 @@ t.test("idle agents whose last turn ended a day ago or more fold under a closed 
 	t.eq(visible.click(out, "Older than a day"), "older")
 end)
 
-t.test("an open Older than a day lists its agents by project, newest turn first", function()
+t.test("an open Older than a day lists its agents by project, in start order", function()
 	local out = view({
 		agent({ pane = 1, title = ICON .. " old plan", activeAt = NOW - 2 * DAY }),
 		agent({ pane = 2, title = ICON .. " today", activeAt = NOW - 3600 }),
@@ -295,19 +326,41 @@ t.test("an open Older than a day lists its agents by project, newest turn first"
 		PI_LABEL,
 		ICON .. "(Idle) old pi 3d",
 		DECK_LABEL,
-		ICON .. "(Idle) old review 1d",
 		ICON .. "(Idle) old plan 2d",
+		ICON .. "(Idle) old review 1d",
 	})
 end)
 
-t.test("pins and this tab's agent never fold under Older than a day, nor do working or waiting agents", function()
+t.test("pins never fold under Older than a day, nor do working or waiting agents", function()
 	local out = view({
 		agent({ pane = 1, title = ICON .. " pinned", activeAt = NOW - 9 * DAY }),
-		agent({ pane = 2, title = ICON .. " mine", activeAt = NOW - 9 * DAY }),
+		agent({ pane = 2, title = ICON .. " old", activeAt = NOW - 9 * DAY }),
 		agent({ pane = 3, state = "working", title = ICON .. " busy", workingSince = 0, activeAt = NOW - 5 * DAY }),
 		agent({ pane = 4, state = "waiting_input", title = ICON .. " asks", activeAt = NOW - 5 * DAY }),
-	}, { focused = 2, pins = { { pane = 1, cwd = DECK, title = ICON .. " pinned" } } })
-	t.eq(visible.zone(out, "Idle"), { DECK_LABEL, ICON .. "(Idle) mine 9d", ICON .. "(Idle) pinned 9d" })
+	}, { pins = { { pane = 1, cwd = DECK, title = ICON .. " pinned" } } })
+	t.eq(visible.zone(out, "Idle"), { DECK_LABEL, ICON .. "(Idle) pinned 9d", ":chev-r Older than a day 1" })
+end)
+
+t.test("the focus never moves an old idle agent out of Older than a day", function()
+	local agents = {
+		agent({ pane = 1, title = ICON .. " today", activeAt = NOW - 3600 }),
+		agent({ pane = 2, title = ICON .. " old", activeAt = NOW - 2 * DAY }),
+	}
+	for _, olderOpen in { false, true } do
+		local unfocused = visible.zone(view(agents, { olderOpen = olderOpen }), "Idle")
+		t.eq(visible.zone(view(agents, { olderOpen = olderOpen, focused = 2 }), "Idle"), unfocused)
+		t.eq(visible.zone(view(agents, { olderOpen = olderOpen, focused = 1 }), "Idle"), unfocused)
+	end
+end)
+
+t.test("a closed Older than a day that holds this tab's agent carries the accent; an open one leaves it to the row", function()
+	local agents = {
+		agent({ pane = 1, title = ICON .. " today", activeAt = NOW - 3600 }),
+		agent({ pane = 2, title = ICON .. " old", activeAt = NOW - 2 * DAY }),
+	}
+	t.eq(visible.accented(view(agents, { focused = 2 })), { ":chev-r Older than a day 1" })
+	t.eq(visible.accented(view(agents, { focused = 2, olderOpen = true })), { ICON .. "(Idle) old 2d" })
+	t.eq(visible.accented(view(agents, { focused = 1 })), { ICON .. "(Idle) today 1h" })
 end)
 
 t.test("the sidebar redraws when a row's time shows another text or an idle agent reaches a day", function()
@@ -343,7 +396,6 @@ t.test("a full Live view of 10 agents with open crews and cards fits one canvas 
 	local message = string.rep("The change touches lib/view_model.luau and tests/live_zones_spec.luau; ", 30)
 	local agents: { any } = {}
 	local subs: { [number]: any } = {}
-	local open: { [number]: boolean } = {}
 	for pane = 1, 10 do
 		local project = "/Users/me/Personal/project-with-a-long-name-" .. (pane % 4)
 		table.insert(agents, agent({
@@ -381,9 +433,8 @@ t.test("a full Live view of 10 agents with open crews and cards fits one canvas 
 			})
 		end
 		subs[pane] = { agents = crew, incomplete = false }
-		open[pane] = true
 	end
-	local out = view(agents, { subagents = subs, subsOpen = open, focused = 4 })
+	local out = view(agents, { subagents = subs, focused = 4 })
 	t.eq(#visible.cards(out) >= 3, true)
 	local nodes, bytes = visible.size(out)
 	t.eq(nodes < 2000, true)
