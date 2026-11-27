@@ -59,15 +59,17 @@
 }
 
 [data-role='agents.top'] > [data-role='agents.icon'] svg {
-	width: 16px;
-	height: 16px;
+	width: 18px;
+	height: 18px;
 }
 
+/* The panel name, as bold and bright as a Tern panel's. */
 [data-role='agents.root'] [data-role='agents.heading'] {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
-	font-weight: 500;
+	font-size: 14px;
+	font-weight: 600;
 	color: var(--t1);
 }
 
@@ -80,7 +82,7 @@
 	box-shadow: inset 0 -1px 0 var(--l1);
 }
 
-/* The hide button and the chips are icon squares in the muted ink, brighter on hover over Tern's own hover fill. */
+/* The hide button and the chips are icon squares in the secondary ink, brighter on hover over Tern's own hover fill. */
 [data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.view'], [data-role='agents.view.on']) {
 	flex: none;
 	display: grid;
@@ -91,7 +93,7 @@
 	padding: 0;
 	line-height: 1;
 	border-radius: var(--r-chip);
-	color: var(--t3);
+	color: var(--t2);
 	transition: color 0.15s var(--ease);
 }
 
@@ -101,13 +103,13 @@
 }
 
 [data-role='agents.root'] [data-role='agents.hide'] svg {
-	width: 16px;
-	height: 16px;
+	width: 18px;
+	height: 18px;
 }
 
 [data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) svg {
-	width: 14px;
-	height: 14px;
+	width: 16px;
+	height: 16px;
 }
 
 [data-role='agents.root'] :is([data-role='agents.hide'], [data-role='agents.view']):hover {
