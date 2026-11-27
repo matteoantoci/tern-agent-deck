@@ -191,12 +191,12 @@ local function kindOf(row: Node): (string?, number?)
 	return kind, tonumber(depth)
 end
 
---- Like `rows`, without the zone heads, project labels and folder rows: the agent, subagent, info and Older rows.
+--- Like `rows`, without the zone heads and project labels: the agent, subagent, info and Older rows.
 function visible.agentRows(view: Node): { string }
 	local out: { string } = {}
 	for _, row in rowNodes(view) do
 		local kind = kindOf(row)
-		if kind ~= "head" and kind ~= "label" and kind ~= "folder" then
+		if kind ~= "head" and kind ~= "label" then
 			table.insert(out, line(row))
 		end
 	end
@@ -301,7 +301,7 @@ function visible.onHover(view: Node, text: string): { string }
 	local out: { string } = {}
 	for _, child in kids(findRow(view, text)) do
 		local role = props(child).role
-		if role == "agents.count" or role == "agents.hover" then
+		if role == "agents.hover" then
 			table.insert(out, part(child) or "")
 		end
 	end
@@ -386,9 +386,8 @@ function visible.click(view: Node, text: string): string?
 end
 
 -- The state that `role` carries (`agents.glyph.<state>` for a title icon, `agents.square.<state>` for a zone head's
--- or a subagent line's square, `agents.dot.<state>` for a closed session's dot, `agents.bar.<state>` for a bar of the
--- subagent strip), or nil.
-local STATE_PARTS = { glyph = true, square = true, dot = true, bar = true, time = true }
+-- or a subagent line's square, `agents.bar.<state>` for a bar of the subagent strip), or nil.
+local STATE_PARTS = { glyph = true, square = true, bar = true, time = true }
 
 local function stateOf(role: any): string?
 	if type(role) ~= "string" then

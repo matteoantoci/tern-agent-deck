@@ -1,7 +1,7 @@
 --!strict
 -- The plugin's shared state in `tern.kv`: the pins, the view the strip shows (Live or Recent), whether "Older than a
--- day" is open, which agents' subagent lines the user opened or closed, the folders open in the Recent view, whether
--- the Recent view shows every folder, when each agent was last in a turn and when each working agent began its turn.
+-- day" and "Earlier" are open, which agents' subagent lines the user opened or closed, when each agent was last in a
+-- turn and when each working agent began its turn.
 -- `tern.kv` is one file for every window and survives restarts and plugin reloads, so every tab and window shows the
 -- same view, pins, rows and timers, and they stay after a reload or a Tern restart.
 
@@ -15,18 +15,17 @@ local PINS = "pins"
 local ACTIVITY = "activity"
 -- When each working agent began its turn (`lib/turns.luau`).
 local TURNS = "turns"
--- The set of folder keys whose sessions show in the Recent view.
-export type KeySet = "recent"
 -- `true` while the Idle zone shows its agents that idled for a day or more.
 local OLDER_OPEN = "older-open"
+-- `true` while the Recent view shows its sessions from before this week.
+local EARLIER_OPEN = "earlier-open"
 -- Whether the user opened (`true`) or closed (`false`) each agent's subagent lines, by pane key. An agent with no
 -- entry follows the default: open while it is this tab's agent.
 local SUBS_OPEN = "subs-open"
 -- Keys that earlier versions kept and no version reads: the folded sections and the open "Older" rows of each
--- folder (the Live view had folders then).
-local OLD_KEYS = { "folded", "older" }
--- `true` while the Recent view shows every folder, rather than only the first few.
-local RECENT_ALL = "recent-all"
+-- folder (the Live view had folders then), and the open folders of the Recent view and whether it showed every
+-- folder (the Recent view had folders then).
+local OLD_KEYS = { "folded", "older", "recent", "recent-all" }
 -- The view the strip shows: `"recent"`, or nothing for Live.
 local VIEW = "view"
 
@@ -106,24 +105,6 @@ local function activity(): { [string]: Activity }
 	return out
 end
 
-local function keySet(name: KeySet): { [string]: boolean }
-	local out: { [string]: boolean } = {}
-	local stored = get(name)
-	if type(stored) ~= "table" then
-		return out
-	end
-	for key, on in stored do
-		if type(key) == "string" and on == true then
-			out[key] = true
-		end
-	end
-	return out
-end
-
-local function recentAll(): boolean
-	return get(RECENT_ALL) == true
-end
-
 local function subsOpen(): { [string]: boolean }
 	local out: { [string]: boolean } = {}
 	local stored = get(SUBS_OPEN)
@@ -166,10 +147,10 @@ local function cleanOldKeys()
 end
 
 --- Completes the view-model input with the shared state: the wall-clock time, when each working agent began its
---- turn, when each agent was last in a turn, the pins, the view the strip shows, whether "Older than a day" is open,
---- which agents' subagent lines the user opened or closed, the folders open in the Recent view and whether it shows
---- every folder. Records the agents it sees for the first time as active now (an agent never seen in a turn counts as
---- new), a working agent with no turn start as working since now, and stores the pins with the pane ids and titles
+--- turn, when each agent was last in a turn, the pins, the view the strip shows, whether "Older than a day" and
+--- "Earlier" are open and which agents' subagent lines the user opened or closed. Records the agents it sees for the
+--- first time as active now (an agent never seen in a turn counts as new), a working agent with no turn start as
+--- working since now, and stores the pins with the pane ids and titles
 --- their agents have now. Drops the turn starts of agents that do not work or are gone, the subagent-line choices of
 --- panes that run no agent, and the keys no version reads.
 function store.fill(input: viewModel.Input): viewModel.Input
@@ -242,8 +223,7 @@ function store.fill(input: viewModel.Input): viewModel.Input
 		setSubsOpen(choices)
 	end
 	input.subsOpen = open
-	input.recentOpen = keySet("recent")
-	input.recentAll = recentAll()
+	input.earlierOpen = get(EARLIER_OPEN) == true
 	input.view = if get(VIEW) == "recent" then "recent" else "live"
 	return input
 end
@@ -341,24 +321,9 @@ function store.setSubsOpen(pane: number, open: boolean)
 	setSubsOpen(choices)
 end
 
---- Adds `key` to the set `name` (a Recent folder opens) when it is not in it, and removes it when it is.
-function store.toggle(name: KeySet, key: string)
-	local set = keySet(name)
-	if set[key] then
-		set[key] = nil
-	else
-		set[key] = true
-	end
-	if next(set) == nil then
-		tern.kv.set(name, nil)
-	else
-		tern.kv.set(name, set)
-	end
-end
-
---- Shows every folder in the Recent view when it shows the first few, and the first few when it shows every one.
-function store.toggleRecentAll()
-	tern.kv.set(RECENT_ALL, if recentAll() then nil else true)
+--- Opens "Earlier" in the Recent view when it is closed, and closes it when it is open.
+function store.toggleEarlier()
+	tern.kv.set(EARLIER_OPEN, if get(EARLIER_OPEN) == true then nil else true)
 end
 
 --- Shows `view` in every copy of the sidebar, in every window, and after a restart.
