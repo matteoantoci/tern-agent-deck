@@ -995,11 +995,13 @@ end
 viewModel.subagentFile = subagentFile
 
 -- How a subagent line shows a subagent: the state of its square, and the name of that state for a screen reader. A
--- finished subagent (done or stopped) gets no line.
+-- finished subagent (done or stopped) gets a line only while omp shows it (see `lined`).
 local SUB_STATE: { [string]: { state: State, label: string } } = {
 	running = { state = "running", label = "Running" },
 	pending = { state = "idle", label = "Queued" },
 	failed = { state = "failed", label = "Failed" },
+	done = { state = "done", label = "Done" },
+	aborted = { state = "stopped", label = "Stopped" },
 }
 
 -- Whether a subagent runs or waits in the queue: only those take a bar of the strip.
@@ -1197,9 +1199,13 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	}
 end
 
--- Whether a subagent gets a line: a finished one (done or stopped) gets none, only the hover card counts it.
-local function lined(sub: subagents.Subagent): boolean
-	return sub.depth <= MAX_DEPTH and sub.status ~= "done" and sub.status ~= "aborted"
+-- Whether a subagent gets a line: a finished one (done or stopped) gets none, only the hover card counts it, except
+-- the one omp shows in its agent's pane (`shown`).
+local function lined(sub: subagents.Subagent, shown: string?): boolean
+	if sub.depth > MAX_DEPTH then
+		return false
+	end
+	return (sub.status ~= "done" and sub.status ~= "aborted") or viewing.shows(sub, shown)
 end
 
 -- An agent draws at most this many subagent lines, and the whole view at most `VIEW_SUB_LINES`, in the order the
@@ -1213,7 +1219,7 @@ local VIEW_SUB_LINES = 100
 local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
 	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
 	for index, sub in subs.agents do
-		if lined(sub) then
+		if lined(sub, shown) then
 			local rank = if viewing.shows(sub, shown) then 2 elseif sub.status == "failed" then 1 else 0
 			table.insert(candidates, { sub = sub, index = index, rank = rank })
 		end
@@ -1264,24 +1270,33 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
-	-- While the lines are open, the subagent the focused pane's omp shows takes the selection from its agent's row.
+	-- The subagent omp shows in the pane keeps its line, finished or not: under the open strip, with no strip under
+	-- the row without a toggle, and under a closed strip as a flat line like a failure. In the focused pane it takes
+	-- the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
-	local drawn, past = drawnSubs(subs, if open then shown else nil, math.min(SUB_LINES, shared.subLines))
+	local drawn, past = drawnSubs(subs, viewed, math.min(SUB_LINES, shared.subLines))
 	for _, sub in subs.agents do
 		if sub.depth > MAX_DEPTH then
 			if sub.status == "running" then
 				deeper += 1
 			end
-		elseif (open or sub.status == "failed") and drawn[sub] then
-			local selected = open and viewing.shows(sub, shown)
-			if selected then
-				(main.p :: { [string]: any }).role = rowRole("item", depth)
+		elseif drawn[sub] then
+			local keptLine = viewing.shows(sub, viewed)
+			if open or keptLine or sub.status == "failed" then
+				local selected = viewing.shows(sub, shown)
+				if selected then
+					(main.p :: { [string]: any }).role = rowRole("item", depth)
+				end
+				local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
+				-- A closed strip still shows a failure and the shown line one step under its agent as a flat line:
+				-- its depth means nothing there.
+				local inTree = open or (keptLine and not strip)
+				local at = if inTree then depth + sub.depth else depth + 1
+				local line = subLine(sub, pane, agent.sessionFile, at, selected, frozen, shared)
+				table.insert(if inTree then lines else failed, line)
+				shared.subLines -= 1
 			end
-			local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
-			local line = subLine(sub, pane, agent.sessionFile, depth + sub.depth, selected, frozen, shared)
-			table.insert(if open then lines else failed, line)
-			shared.subLines -= 1
 		end
 	end
 	if open and past > 0 then
@@ -1297,9 +1312,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			table.insert(lines, infoLine("subs-incomplete", iconNode("warn", "warning"), text, "warning", depth + 1))
 		end
 	end
-	-- A closed strip still shows a failure, one step under its agent as a flat line: its depth means nothing there.
 	for _, line in failed do
-		(line.p :: { [string]: any }).role = rowRole("item", depth + 1)
 		table.insert(lines, line)
 	end
 	if #lines == 1 then

@@ -125,10 +125,104 @@ t.test("a nested subagent omp shows is selected by its full id", function()
 	)
 end)
 
-t.test("while another agent is focused, its row stays the selected one", function()
+-- The sidebar while omp in pane 7 shows `shown` and its last read listed `listed`.
+local function showing(listed: { any }, shown: string, focused: number?): any
+	local subs: { [number]: any } = {}
+	subs[7] = viewing.keep({ agents = listed, incomplete = false }, nil, shown)
+	return viewModel.build({
+		agents = {
+			{ pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 },
+			{ pane = 9, state = "working", cwd = "/repo", title = "Other", workingSince = 0 },
+		},
+		now = 0,
+		subagents = subs,
+		viewing = { [7] = shown },
+		focused = focused,
+	}).view
+end
+
+t.test("the subagent omp shows keeps its line when done, selected, with no strip and no toggle", function()
+	local out = showing({ sub("Ticket03", 1, { status = "done" }), sub("Ticket07", 1, { status = "done" }) }, "Ticket07", 7)
+	t.eq(visible.agentRows(out), {
+		":sparkle(Working) Lead 0s",
+		"■(Done) Ticket07 task",
+		":sparkle(Working) Other 0s",
+	})
+	t.eq(visible.selected(out), { "■(Done) Ticket07 task" })
+end)
+
+t.test("the subagent omp shows keeps its line when stopped, next to the running ones of an open strip", function()
+	local out = showing({ sub("Ticket03"), sub("Ticket07", 1, { status = "aborted" }) }, "Ticket07", 7)
+	t.eq(visible.agentRows(out), {
+		":sparkle(Working) Lead [▮] 0s",
+		"■(Not live) Ticket03 task",
+		"■(Stopped) Ticket07 task",
+		":sparkle(Working) Other 0s",
+	})
+	t.eq(visible.selected(out), { "■(Stopped) Ticket07 task" })
+end)
+
+t.test("a done nested subagent omp shows keeps its line alone at its depth", function()
+	local out = showing({
+		sub("Ticket07", 1, { status = "done" }),
+		sub("Ticket07>Ticket04", 2, { parent = "Ticket07", status = "done" }),
+	}, "Ticket07.Ticket04", 7)
+	t.eq(visible.agentRows(out), {
+		":sparkle(Working) Lead 0s",
+		"■(Done) Ticket04 task",
+		":sparkle(Working) Other 0s",
+	})
+	t.eq(visible.selected(out), { "■(Done) Ticket04 task" })
+end)
+
+t.test("while another agent is focused, the done subagent omp shows keeps its line but not the selection", function()
+	local out = showing({ sub("Ticket07", 1, { status = "done" }) }, "Ticket07", 9)
+	t.eq(visible.agentRows(out), {
+		":sparkle(Working) Other 0s",
+		":sparkle(Working) Lead 0s",
+		"■(Done) Ticket07 task",
+	})
+	t.eq(visible.selected(out), { ":sparkle(Working) Other 0s" })
+end)
+
+t.test("once omp shows the main session again, the done subagent loses its line", function()
+	local subs: { [number]: any } = {}
+	subs[7] = { agents = { sub("Ticket07", 1, { status = "done" }) }, incomplete = false }
+	local out = viewModel.build({
+		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
+		now = 0,
+		subagents = subs,
+		focused = 7,
+	}).view
+	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead 0s" })
+end)
+
+t.test("under a closed strip, the subagent omp shows keeps a flat line like a failure, selected when focused", function()
+	local subs: { [number]: any } = {}
+	subs[7] = viewing.keep({
+		agents = { sub("Ticket03"), sub("Ticket07>Ticket04", 2, { parent = "Ticket07", status = "done" }) },
+		incomplete = false,
+	}, nil, "Ticket07.Ticket04")
+	local out = viewModel.build({
+		agents = { { pane = 7, state = "working", cwd = "/repo", title = "Lead", workingSince = 0 } },
+		now = 0,
+		subagents = subs,
+		viewing = { [7] = "Ticket07.Ticket04" },
+		subsOpen = { [7] = false },
+		focused = 7,
+	}).view
+	t.eq(visible.agentRows(out), { ":sparkle(Working) Lead [▮] 0s", "■(Done) Ticket04 task" })
+	t.eq(visible.selected(out), { "■(Done) Ticket04 task" })
+end)
+
+t.test("while another agent is focused, its row stays the selected one and the shown subagent keeps a flat line", function()
 	local out = after(nil, dock({ "Ticket07" }), 9)
 	t.eq(visible.selected(out), { ":sparkle(Working) Other 0s" })
-	t.eq(visible.agentRows(out), { ":sparkle(Working) Other 0s", ":sparkle(Working) Lead [▮ ▮ ▮] 0s" })
+	t.eq(visible.agentRows(out), {
+		":sparkle(Working) Other 0s",
+		":sparkle(Working) Lead [▮ ▮ ▮] 0s",
+		"■(Running) Ticket07 task",
+	})
 end)
 
 t.test("a shown subagent the last read did not list leaves the agent's row selected", function()
