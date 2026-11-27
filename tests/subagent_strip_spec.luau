@@ -58,6 +58,12 @@ t.test("an agent with subagents but none running shows N done in the strip's pla
 	t.eq(visible.bars(out, "Lead"), {})
 end)
 
+t.test("an agent with subagents but none running and none done shows no strip slot, not 0 done", function()
+	local out = view("idle", { sub("A", "aborted"), sub("B", "aborted") })
+	t.eq(visible.agentRows(out), { ":sparkle(Idle) Lead" })
+	t.eq(visible.button(out, "Lead"), nil)
+end)
+
 t.test("an agent with no subagents has no strip", function()
 	t.eq(visible.agentRows(view("working", {})), { ":sparkle(Working) Lead 0s" })
 	t.eq(visible.button(view("working", {}), "Lead"), nil)

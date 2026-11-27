@@ -1042,11 +1042,15 @@ local function crewText(crew: Crew): string
 end
 
 -- The strip at the end of an agent's row, when the agent has subagents: one bar in the working color per running
--- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place. A click shows or
--- hides the subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and says what a
--- click does, so that a failure is one hover away also while the lines are closed.
-local function stripNode(pane: string, crew: Crew, open: boolean): Node
+-- subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N done" in the same place; with none
+-- running and none done, no strip. A click shows or hides the subagent lines (`subs=<pane> open` or
+-- `subs=<pane> closed`); the tooltip lists every count and says what a click does, so that a failure is one hover
+-- away also while the lines are closed.
+local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local running = crew.running
+	if running == 0 and crew.done == 0 then
+		return nil
+	end
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
@@ -1088,7 +1092,10 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local open = if chosen ~= nil then chosen else shared.focused == agent.pane
 	-- The strip goes right after the name, before the time.
 	local children = main.c :: { Node }
-	table.insert(children, 3, stripNode(pane, crew, open))
+	local strip = stripNode(pane, crew, open)
+	if strip then
+		table.insert(children, 3, strip)
+	end
 	local lines: { Node } = { main }
 	local failed: { Node } = {}
 	local deeper = 0
