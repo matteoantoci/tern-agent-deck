@@ -150,6 +150,7 @@
 [data-role='agents.root'] [data-role^='agents.label.'] {
 	height: 24px;
 	font-size: 12px;
+	position: relative;
 	color: var(--t3);
 }
 
@@ -169,6 +170,18 @@
 
 [data-role='agents.root'] [data-role='agents.rule'] > *,
 [data-role='agents.root'] [data-role='agents.rule']::before,
+/* The label's `+` floats over the right end, so the rule ends on the same right edge as the row numbers; while the
+   `+` shows, the rule stops short of it. */
+[data-role='agents.root'] [data-role^='agents.label.'] > [data-role='agents.hover'] {
+	position: absolute;
+	top: 0;
+	right: -4px;
+}
+
+[data-role='agents.root'] [data-role^='agents.label.']:is(:hover, :focus-within) [data-role='agents.rule'] {
+	margin-right: 28px;
+}
+
 [data-role='agents.root'] [data-role='agents.rule']::after {
 	display: none;
 }
