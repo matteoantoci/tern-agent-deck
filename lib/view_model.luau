@@ -114,9 +114,8 @@ export type Input = {
 	pins: { Pin }?,
 	--- Whether the Idle zone shows its agents that idled for a day or more ("Older than a day" is open).
 	olderOpen: boolean?,
-	--- Whether each agent's subagent lines are open, by pane. An agent the user did not choose one for has them open
-	--- while it is this tab's agent, and closed otherwise.
-	subsOpen: { [number]: boolean }?,
+	--- The panes whose subagent lines the user closed. Every other agent has them open.
+	subsClosed: { [number]: boolean }?,
 	--- The omp sessions the reader found, in any order; nil before the first read.
 	sessions: { Session }?,
 	--- Whether the Recent view shows its sessions from before this week ("Earlier" is open).
@@ -186,8 +185,8 @@ type Shared = {
 	viewing: { [number]: string },
 	--- The model (`provider/model`) of each session file the reader read, by file.
 	routes: { [string]: string },
-	--- Whether each agent's subagent lines are open, by pane, as the user chose; nil when the user chose none.
-	subsOpen: { [number]: boolean },
+	--- The panes whose subagent lines the user closed.
+	subsClosed: { [number]: boolean },
 	--- What each live omp session cost, by session file.
 	cost: { [string]: Cost },
 	--- How many more subagent lines the view can draw (see `VIEW_SUB_LINES`); each agent's lines take from it.
@@ -1215,7 +1214,7 @@ local VIEW_SUB_LINES = 100
 
 -- The subagents of `subs` that get a line (see `lined`), at most `limit`: first the one the pane shows, then the
 -- failed ones (a failure never hides), then the newest of the others (running, waiting, queued). Also how many get
--- none.
+-- none. The rank only picks the lines that stay: they draw in tree order.
 local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
 	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
 	for index, sub in subs.agents do
@@ -1243,12 +1242,15 @@ local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: numbe
 	return drawn, math.max(0, #candidates - limit)
 end
 
--- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents one step
--- down per nesting level: every one not finished while the lines are open (`agents.strip.open`), else only the
--- failed ones (a failure never hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES`
--- (see `drawnSubs`), then a muted "+N more" line. A warning line says when Tern cut the read, and one that +N running
--- subagents sit past the levels omp renders. With no strip (every subagent finished), the lines are closed. This
--- tab's agent, and its open lines, are one block, which `agents.css` draws with the accent.
+-- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents in tree
+-- order (each one after the one it runs under, siblings in the order the tray gives), one step down per nesting level:
+-- every one not finished while the lines are open (`agents.strip.open`), else only the failed ones (a failure never
+-- hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see `drawnSubs`), then a muted
+-- "+N more" line. A warning line says when Tern cut the read, and one that +N running subagents sit past the levels
+-- omp renders. The lines are open for every agent until the user closes them (`subsClosed`), so that no line moves
+-- when its state, the focus or the subagent omp shows changes. With no strip (no subagent runs, waits or is queued),
+-- nothing can hide the lines that are left. This tab's agent, and its open lines, are one block, which `agents.css`
+-- draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
 	if not subs or agent.state == "exited" or #subs.agents == 0 then
 		return row(agent, shared, pinned, depth)
@@ -1256,23 +1258,19 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	local pane = string.format("%.0f", agent.pane)
 	local crew = count(subs)
 	local main = row(agent, shared, pinned, depth, crewText(crew))
-	local chosen = shared.subsOpen[agent.pane]
-	-- This tab's agent shows its lines open by default only while a subagent runs or waits on the user.
-	local busy = crew.running + crew.waiting > 0
-	local open = if chosen ~= nil then chosen else shared.focused == agent.pane and busy
+	local open = not shared.subsClosed[agent.pane]
 	-- The strip goes right after the name, before the time.
 	local strip = stripNode(pane, crew, open)
 	if strip then
 		table.insert(main.c :: { Node }, 3, strip)
 	else
-		open = false
+		-- Only the failed lines and the shown one are left, and they keep their places in the tree.
+		open = true
 	end
 	local lines: { Node } = { main }
-	local failed: { Node } = {}
 	local deeper = 0
-	-- The subagent omp shows in the pane keeps its line, finished or not: under the open strip, with no strip under
-	-- the row without a toggle, and under a closed strip as a flat line like a failure. In the focused pane it takes
-	-- the selection from its agent's row.
+	-- The subagent omp shows in the pane keeps its line, finished or not: in the tree under open lines, and as a flat
+	-- line like a failure under a closed strip. In the focused pane it takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
 	local drawn, past = drawnSubs(subs, viewed, math.min(SUB_LINES, shared.subLines))
@@ -1282,8 +1280,7 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 				deeper += 1
 			end
 		elseif drawn[sub] then
-			local keptLine = viewing.shows(sub, viewed)
-			if open or keptLine or sub.status == "failed" then
+			if open or viewing.shows(sub, viewed) or sub.status == "failed" then
 				local selected = viewing.shows(sub, shown)
 				if selected then
 					(main.p :: { [string]: any }).role = rowRole("item", depth)
@@ -1291,10 +1288,8 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 				local frozen = subs.frozen == true and not viewing.shows(sub, viewed)
 				-- A closed strip still shows a failure and the shown line one step under its agent as a flat line:
 				-- its depth means nothing there.
-				local inTree = open or (keptLine and not strip)
-				local at = if inTree then depth + sub.depth else depth + 1
-				local line = subLine(sub, pane, agent.sessionFile, at, selected, frozen, shared)
-				table.insert(if inTree then lines else failed, line)
+				local at = if open then depth + sub.depth else depth + 1
+				table.insert(lines, subLine(sub, pane, agent.sessionFile, at, selected, frozen, shared))
 				shared.subLines -= 1
 			end
 		end
@@ -1311,9 +1306,6 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 			local text = "subagents may be incomplete"
 			table.insert(lines, infoLine("subs-incomplete", iconNode("warn", "warning"), text, "warning", depth + 1))
 		end
-	end
-	for _, line in failed do
-		table.insert(lines, line)
 	end
 	if #lines == 1 then
 		return main
@@ -1905,7 +1897,7 @@ local function context(input: Input): Shared
 		viewing = input.viewing or {},
 		routes = input.routes or {},
 		cost = input.cost or {},
-		subsOpen = input.subsOpen or {},
+		subsClosed = input.subsClosed or {},
 		subLines = VIEW_SUB_LINES,
 	}
 	for _, agent in input.agents do

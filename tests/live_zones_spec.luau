@@ -396,7 +396,6 @@ t.test("a full Live view of 10 agents with open crews and cards fits one canvas 
 	local message = string.rep("The change touches lib/view_model.luau and tests/live_zones_spec.luau; ", 30)
 	local agents: { any } = {}
 	local subs: { [number]: any } = {}
-	local open: { [number]: boolean } = {}
 	for pane = 1, 10 do
 		local project = "/Users/me/Personal/project-with-a-long-name-" .. (pane % 4)
 		table.insert(agents, agent({
@@ -434,9 +433,8 @@ t.test("a full Live view of 10 agents with open crews and cards fits one canvas 
 			})
 		end
 		subs[pane] = { agents = crew, incomplete = false }
-		open[pane] = true
 	end
-	local out = view(agents, { subagents = subs, subsOpen = open, focused = 4 })
+	local out = view(agents, { subagents = subs, focused = 4 })
 	t.eq(#visible.cards(out) >= 3, true)
 	local nodes, bytes = visible.size(out)
 	t.eq(nodes < 2000, true)

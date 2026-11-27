@@ -1,7 +1,7 @@
 --!strict
 -- The plugin's shared state in `tern.kv`: the pins, the view the strip shows (Live or Recent), whether "Older than a
--- day" and "Earlier" are open, which agents' subagent lines the user opened or closed, when each agent was last in a
--- turn and when each working agent began its turn.
+-- day" and "Earlier" are open, which agents' subagent lines the user closed, when each agent was last in a turn and
+-- when each working agent began its turn.
 -- `tern.kv` is one file for every window and survives restarts and plugin reloads, so every tab and window shows the
 -- same view, pins, rows and timers, and they stay after a reload or a Tern restart.
 
@@ -19,13 +19,13 @@ local TURNS = "turns"
 local OLDER_OPEN = "older-open"
 -- `true` while the Recent view shows its sessions from before this week.
 local EARLIER_OPEN = "earlier-open"
--- Whether the user opened (`true`) or closed (`false`) each agent's subagent lines, by pane key. An agent with no
--- entry follows the default: open while it is this tab's agent.
-local SUBS_OPEN = "subs-open"
+-- The agents whose subagent lines the user closed, as a set of pane keys. Every other agent has them open.
+local SUBS_CLOSED = "subs-closed"
 -- Keys that earlier versions kept and no version reads: the folded sections and the open "Older" rows of each
--- folder (the Live view had folders then), and the open folders of the Recent view and whether it showed every
--- folder (the Recent view had folders then).
-local OLD_KEYS = { "folded", "older", "recent", "recent-all" }
+-- folder (the Live view had folders then), the open folders of the Recent view and whether it showed every
+-- folder (the Recent view had folders then), and the open or closed subagent lines of each agent (lines were closed
+-- by default then).
+local OLD_KEYS = { "folded", "older", "recent", "recent-all", "subs-open" }
 -- The pane of the agent the user last focused outside the sidebar, so that a plugin reload keeps this tab's agent.
 local FOCUSED = "focused"
 -- The view the strip shows: `"recent"`, or nothing for Live.
@@ -107,22 +107,22 @@ local function activity(): { [string]: Activity }
 	return out
 end
 
-local function subsOpen(): { [string]: boolean }
+local function subsClosed(): { [string]: boolean }
 	local out: { [string]: boolean } = {}
-	local stored = get(SUBS_OPEN)
+	local stored = get(SUBS_CLOSED)
 	if type(stored) ~= "table" then
 		return out
 	end
-	for key, open in stored do
-		if type(key) == "string" and type(open) == "boolean" then
-			out[key] = open
+	for key, closed in stored do
+		if type(key) == "string" and closed == true then
+			out[key] = true
 		end
 	end
 	return out
 end
 
-local function setSubsOpen(choices: { [string]: boolean })
-	tern.kv.set(SUBS_OPEN, if next(choices) == nil then nil else choices)
+local function setSubsClosed(panes: { [string]: boolean })
+	tern.kv.set(SUBS_CLOSED, if next(panes) == nil then nil else panes)
 end
 
 local function setTurns(starts: turns.Starts)
@@ -150,10 +150,10 @@ end
 
 --- Completes the view-model input with the shared state: the wall-clock time, when each working agent began its
 --- turn, when each agent was last in a turn, the pins, the view the strip shows, whether "Older than a day" and
---- "Earlier" are open and which agents' subagent lines the user opened or closed. Records the agents it sees for the
+--- "Earlier" are open and which agents' subagent lines the user closed. Records the agents it sees for the
 --- first time as active now (an agent never seen in a turn counts as new), a working agent with no turn start as
 --- working since now, and stores the pins with the pane ids and titles
---- their agents have now. Drops the turn starts of agents that do not work or are gone, the subagent-line choices of
+--- their agents have now. Drops the turn starts of agents that do not work or are gone, the closed subagent lines of
 --- panes that run no agent, and the keys no version reads.
 function store.fill(input: viewModel.Input): viewModel.Input
 	cleanOldKeys()
@@ -208,23 +208,23 @@ function store.fill(input: viewModel.Input): viewModel.Input
 	end
 	input.pins = resolved
 	input.olderOpen = get(OLDER_OPEN) == true
-	-- An empty agent list can be a daemon restart: the choices stay then.
-	local choices = subsOpen()
-	local open: { [number]: boolean } = {}
+	-- An empty agent list can be a daemon restart: the closed lines stay then.
+	local closedKeys = subsClosed()
+	local closed: { [number]: boolean } = {}
 	local dropped = false
-	for key, choice in choices do
+	for key in closedKeys do
 		local pane = tonumber(key)
 		if pane == nil or (#input.agents > 0 and not listed[key]) then
-			choices[key] = nil
+			closedKeys[key] = nil
 			dropped = true
 		else
-			open[pane] = choice
+			closed[pane] = true
 		end
 	end
 	if dropped then
-		setSubsOpen(choices)
+		setSubsClosed(closedKeys)
 	end
-	input.subsOpen = open
+	input.subsClosed = closed
 	input.earlierOpen = get(EARLIER_OPEN) == true
 	input.view = if get(VIEW) == "recent" then "recent" else "live"
 	return input
@@ -334,9 +334,13 @@ end
 --- Opens (`open`) or closes the subagent lines of the agent in `pane`, in every copy of the sidebar and after a
 --- reload.
 function store.setSubsOpen(pane: number, open: boolean)
-	local choices = subsOpen()
-	choices[paneKey(pane)] = open
-	setSubsOpen(choices)
+	local closed = subsClosed()
+	if open then
+		closed[paneKey(pane)] = nil
+	else
+		closed[paneKey(pane)] = true
+	end
+	setSubsClosed(closed)
 end
 
 --- Opens "Earlier" in the Recent view when it is closed, and closes it when it is open.

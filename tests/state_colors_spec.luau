@@ -61,7 +61,6 @@ t.test("no title icon, square or strip bar takes a Tern tone or span style, so n
 		agents = { agent(1, "working", "a"), agent(2, "waiting_input", "b"), agent(3, "idle", "c"), agent(7, "working", "Lead") },
 		pins = { { pane = 9, title = "d", cwd = "/repo" } },
 		now = 0,
-		subsOpen = { [7] = true },
 		subagents = {
 			[7] = {
 				agents = { sub("A", "running"), sub("B", "running", { waiting = true }), sub("C", "done"), sub("D", "failed") },
