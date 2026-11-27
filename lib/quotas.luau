@@ -18,7 +18,9 @@ local PROVIDER: { [string]: string } = {
 	["google-antigravity"] = "Gemini",
 }
 
-local STATUS: { [string]: "ok" | "warning" | "exhausted" } = { ok = "ok", warning = "warning", exhausted = "exhausted" }
+type Status = "ok" | "warning" | "exhausted"
+
+local STATUS: { [string]: Status } = { ok = "ok", warning = "warning", exhausted = "exhausted" }
 
 -- How many fields each row has.
 local FIELDS = 7
@@ -67,17 +69,18 @@ function quotas.parse(output: string, now: number): { viewModel.Quota }?
 		if provider == "" or not used or (resetText ~= "" and not resetsAt) then
 			return nil
 		end
-		local status = STATUS[statusText]
+		local status: Status? = STATUS[statusText]
 		if status and resetsAt and resetsAt > now then
 			local account = string.match(email, "^([^@]+)")
-			table.insert(found, {
+			local quota: viewModel.Quota = {
 				provider = PROVIDER[provider] or provider,
 				account = account,
 				label = window(if windowLabel ~= "" then windowLabel else limit),
 				used = used,
 				status = status,
 				resetsAt = resetsAt,
-			})
+			}
+			table.insert(found, quota)
 		end
 	end
 	return found

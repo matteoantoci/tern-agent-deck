@@ -30,5 +30,6 @@ require("./live_zones_spec")
 require("./copy_session_spec")
 require("./quotas_spec")
 require("./quota_line_spec")
+require("./quota_reader_spec")
 
 t.run()

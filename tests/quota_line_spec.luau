@@ -97,4 +97,18 @@ t.test("the quota line shows in the Recent view too", function()
 	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 7d 97% · resets Sun" })
 end)
 
+t.test("the sidebar redraws when the reset shows another text, and when the window resets", function()
+	local function due(left: number, status: string?): number?
+		local q = quota({ used = 0.95, status = status or "warning", left = left })
+		return viewModel.redrawDue({ agents = {}, now = 0, time = NOW, quotas = { q } } :: any)
+	end
+	t.eq(due(38 * MINUTE + 30), 30 * 1000)
+	t.eq(due(3 * HOUR + 20 * MINUTE), 20 * MINUTE * 1000)
+	t.eq(due(0.25), 250)
+	t.eq(due(DAY + 2 * HOUR), 2 * HOUR * 1000)
+	t.eq(due(38 * MINUTE + 30, "ok"), nil)
+	t.eq(due(38 * MINUTE), 1000)
+	t.eq(due(DAY), 1000)
+end)
+
 return nil
