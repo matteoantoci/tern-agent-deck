@@ -46,13 +46,16 @@ t.test("each subagent state puts its own state on its line's square", function()
 		agents = { agent(7, "working", "Lead") },
 		now = 0,
 		focused = 7,
-		subagents = { [7] = { agents = { sub("A", "running"), sub("B", "running", { waiting = true }) }, incomplete = false } },
+		subagents = { [7] = { agents = { sub("A", "running"), sub("B", "running", { waiting = true }), sub("C", "running", { intent = "Ask Which one?" }) }, incomplete = false } },
 	}).view
 	t.eq(visible.states(live), {
+		"waiting: ■ Needs you 1",
+		"waiting: ■(Waiting for you) C in Lead",
 		"working: ■ Working 1 busy",
-		"working: :terminal(Working) Lead [▮] 0s",
+		"working: :terminal(Working) Lead [:chev] 0s",
 		"running: ■(Running) A",
-		"waiting: ■(Waiting on its subagents) B",
+		"running: ■(Running) B",
+		"waiting: ■(Waiting for you) C Ask Which one?",
 	})
 end)
 

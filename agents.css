@@ -178,12 +178,13 @@
 	background: var(--l1);
 }
 
-/* The label's `+` floats over the right end, so the rule ends on the same right edge as the row numbers; while the
-   `+` shows, the rule stops short of it. */
+/* The label's `+` floats over the right end of the rule. Its box stays inside the row: its right edge is on the right
+   edge of the row numbers (the row's padding). While the `+` shows, the rule stops short of it. */
 [data-role='agents.root'] [data-role^='agents.label.'] > [data-role='agents.hover'] {
 	position: absolute;
 	top: 0;
-	right: -4px;
+	right: 8px;
+	margin-right: 0;
 }
 
 [data-role='agents.root'] [data-role^='agents.label.']:is(:hover, :focus-within) [data-role='agents.rule'] {
@@ -411,9 +412,9 @@
 	box-shadow: inset 0 0 0 1px var(--t3);
 }
 
-/* The subagent strip after an agent's title: one 3×12 bar in the working color per running subagent, then "+N";
-   with none running, a neutral "N subagents" for the ones that wait or are queued. A click shows or hides the
-   subagent lines. */
+/* The subagent strip after an agent's title, while the lines are folded: one 3×12 bar in the working color per
+   running subagent, then "+N"; with none running, a neutral "N subagents" for the ones that wait or are queued. A
+   click shows the subagent lines. */
 [data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']) {
 	flex: none;
 	display: flex;
@@ -431,6 +432,20 @@
 [data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']):hover {
 	box-shadow: inset 0 0 0 1px var(--l2);
 	color: var(--t1);
+}
+
+/* While the lines show, the strip is only a chevron that folds them. The slot keeps its width at rest, so the title
+   does not move when the chevron shows on row hover or focus. */
+[data-role='agents.root'] [data-role='agents.strip.open'] {
+	justify-content: center;
+	width: 24px;
+	padding: 0;
+	opacity: 0;
+	transition: opacity 0.15s var(--ease);
+}
+
+[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within) [data-role='agents.strip.open'] {
+	opacity: 1;
 }
 
 [data-role='agents.bar.running'] {

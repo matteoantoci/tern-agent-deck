@@ -347,7 +347,8 @@ local ROLE = {
 	time = "agents.time",
 	meta = "agents.meta",
 	hover = "agents.hover",
-	--- The strip at the end of an agent's row, open or closed (`agents.strip.open`).
+	--- The strip at the end of an agent's row while its lines are folded; `agents.strip.open` while they show (a
+	--- chevron that shows only on row hover).
 	strip = "agents.strip",
 	--- The strip's "N subagents", shown when no subagent runs but some wait or are queued.
 	tally = "agents.tally",
@@ -1003,19 +1004,29 @@ local SUB_STATE: { [string]: { state: State, label: string } } = {
 	aborted = { state = "stopped", label = "Stopped" },
 }
 
--- Whether a subagent runs or waits in the queue: only those take a bar of the strip.
-local function runs(sub: subagents.Subagent): boolean
-	return sub.status == "running" or sub.status == "pending"
+-- The question of a subagent that asks the user: omp's tray names its current call as the tool's verb and what the
+-- call acts on, so a running subagent inside the `ask` tool shows `Ask <question>`. Nil for any other subagent; an
+-- empty string when the call shows no question.
+local function asks(sub: subagents.Subagent): string?
+	if sub.status ~= "running" or type(sub.intent) ~= "string" then
+		return nil
+	end
+	local intent = sub.intent :: string
+	if intent == "Ask" then
+		return ""
+	end
+	return string.match(intent, "^Ask%s+(.*)$")
 end
 
--- What a subagent line shows as a state: a subagent that only waits on its own subagents, or one whose state is the
--- last one read while omp shows another subagent, says so.
+-- What a subagent line shows as a state: a subagent that asks the user waits (omp's `waiting` flag, a wait on its
+-- own job or subagent, still counts as running), and one whose state is the last one read while omp shows another
+-- subagent says so.
 local function subShown(sub: subagents.Subagent, frozen: boolean): { state: State, label: string }
 	if frozen then
 		return { state = "frozen", label = "Not live" }
 	end
-	if sub.waiting and runs(sub) then
-		return { state = "waiting", label = "Waiting on its subagents" }
+	if asks(sub) then
+		return { state = "waiting", label = "Waiting for you" }
 	end
 	return SUB_STATE[sub.status] or { state = "idle", label = "Queued" }
 end
@@ -1122,7 +1133,7 @@ local function count(subs: subagents.Subagents): Crew
 	local crew: Crew = { running = 0, waiting = 0, queued = 0, done = 0, failed = 0, stopped = 0 }
 	for _, sub in subs.agents do
 		if sub.status == "running" then
-			if sub.waiting then
+			if asks(sub) then
 				crew.waiting += 1
 			else
 				crew.running += 1
@@ -1161,11 +1172,12 @@ local function crewText(crew: Crew): string
 	return table.concat(parts, " · ")
 end
 
--- The strip at the end of an agent's row, while a subagent runs, waits or is queued: one bar in the working color per
--- running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the ones that
--- wait or are queued. Nil when every subagent finished: then the agent has no subagent lines to show or hide. A click
--- shows or hides the subagent lines (`subs=<pane> open` or `subs=<pane> closed`); the tooltip lists every count and
--- says what a click does.
+-- The strip at the end of an agent's row, while a subagent runs, waits or is queued. Folded: one bar in the working
+-- color per running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the
+-- ones that wait or are queued; a click shows the subagent lines (`subs=<pane> open`). Open: the lines show the
+-- subagents, so the slot holds only a chevron, which `agents.css` shows while the pointer or the focus is on the row;
+-- a click folds the lines (`subs=<pane> closed`). Nil when every subagent finished: then the agent has no subagent
+-- lines to show or hide. The tooltip lists every count and says what a click does.
 local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local running = crew.running
 	local pending = crew.waiting + crew.queued
@@ -1175,7 +1187,9 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
 	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
-	if running > 0 then
+	if open then
+		table.insert(children, chevron(true))
+	elseif running > 0 then
 		for _ = 1, math.min(running, STRIP_BARS) do
 			table.insert(children, { k = "text", p = { text = "▮", wrap = "none", role = ROLE.bar .. "running" } })
 		end
@@ -1190,7 +1204,7 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 		p = {
 			key = "strip",
 			gap = "none",
-			role = if running > 0 then (if open then ROLE.strip .. ".open" else ROLE.strip) else ROLE.tally,
+			role = if open then ROLE.strip .. ".open" elseif running > 0 then ROLE.strip else ROLE.tally,
 			title = title,
 			actions = { click = click },
 		},
@@ -1787,20 +1801,6 @@ local function waitOrder(agents: { Agent }): { Agent }
 		return a.pane < b.pane
 	end)
 	return waiting
-end
-
--- The question of a subagent that asks the user: omp's tray names its current call as the tool's verb and what the
--- call acts on, so a running subagent inside the `ask` tool shows `Ask <question>`. Nil for any other subagent; an
--- empty string when the call shows no question.
-local function asks(sub: subagents.Subagent): string?
-	if sub.status ~= "running" or type(sub.intent) ~= "string" then
-		return nil
-	end
-	local intent = sub.intent :: string
-	if intent == "Ask" then
-		return ""
-	end
-	return string.match(intent, "^Ask%s+(.*)$")
 end
 
 -- One Needs you card: how long its agent or subagent has waited, in seconds, and its node.

@@ -13,8 +13,9 @@ Agent Deck is a Tern plugin with a window half only. It shows an "Agents" sideba
   head (`agents.chrome`: the Live/Recent switch and the quota line), the zones (`agents.zone`, `agents.head`, the
   zone square `agents.square.<state>`), the project labels (`agents.label`, `agents.rule`), the rows by role
   `agents.<kind>.<depth>`, the title icon in its state's color (`agents.glyph.<state>`), the subagent strip
-  (`agents.strip` with one `agents.bar.running` per running subagent, or `agents.tally`, "N subagents", while none
-  runs but some wait or are queued; no strip when every subagent finished), the Needs you cards (`agents.card`), and this tab's agent
+  (while the lines are folded, `agents.strip` with one `agents.bar.running` per running subagent, or `agents.tally`,
+  "N subagents", while none runs but some ask the user or are queued; while they show, `agents.strip.open`, a chevron
+  that shows on row hover; no strip when every subagent finished), the Needs you cards (`agents.card`), and this tab's agent
   (`agents.mine`, the only use of the accent besides keyboard focus). State colors: working and running `--live`,
   waiting `--warn`, done `--ok`, failed `--bad`, idle `--t3`, stopped and frozen `--t4`. All motion stops under the
   system's reduced motion and Tern's Reduce motion setting. A canvas takes no `font`, so it sets the canvas (role

@@ -497,6 +497,18 @@ function visible.button(view: Node, text: string): string?
 	return nil
 end
 
+--- The role of the first button or control (the subagent strip) in the row that shows `text`; `agents.css` keys on
+--- it (an open strip shows only on row hover). Nil when the row has none.
+function visible.controlRole(view: Node, text: string): string?
+	for _, child in kids(findRow(view, text)) do
+		if child.k == "button" or isControl(child) then
+			local role = props(child).role
+			return if type(role) == "string" then role else nil
+		end
+	end
+	return nil
+end
+
 --- The state of each bar of the subagent strip in the row that shows `text`, in order; empty when it has none.
 function visible.bars(view: Node, text: string): { string }
 	local out: { string } = {}

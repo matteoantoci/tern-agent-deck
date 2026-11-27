@@ -67,7 +67,7 @@ end
 t.test("while omp shows a subagent, its agent keeps the subagent rows and the shown one is selected", function()
 	local out = after(nil, dock({ "Ticket07" }), 7)
 	t.eq(visible.agentRows(out), {
-		":terminal(Working) Lead [▮ ▮ ▮] 0s",
+		":terminal(Working) Lead [:chev] 0s",
 		"■(Not live) Ticket03 task",
 		"■(Running) Ticket07 task",
 		"■(Not live) Ticket04 task",
@@ -84,7 +84,7 @@ end)
 t.test("a not-live subagent's square says so, while the running ones show running", function()
 	t.eq(visible.states(after(nil, dock({ "Ticket07" }), 7)), {
 		"working: ■ Working 2 busy",
-		"working: :terminal(Working) Lead [▮ ▮ ▮] 0s",
+		"working: :terminal(Working) Lead [:chev] 0s",
 		"frozen: ■(Not live) Ticket03 task",
 		"running: ■(Running) Ticket07 task",
 		"frozen: ■(Not live) Ticket04 task",
@@ -100,7 +100,7 @@ t.test("a sibling that finished while omp showed another subagent loses its line
 		incomplete = false,
 	}
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
-		":terminal(Working) Lead [▮] 0s",
+		":terminal(Working) Lead [:chev] 0s",
 		"■(Running) Ticket07 task",
 		":terminal(Working) Other 0s",
 	})
@@ -112,7 +112,7 @@ t.test("once omp shows the main session again, the rows follow the reads and the
 	t.eq(visible.selected(out), { ":terminal(Working) Lead 0s" })
 	local read: any = { agents = { sub("Ticket03") }, incomplete = false }
 	t.eq(visible.agentRows(after(read, dock(nil), 7)), {
-		":terminal(Working) Lead [▮] 0s",
+		":terminal(Working) Lead [:chev] 0s",
 		"■(Running) Ticket03 task",
 		":terminal(Working) Other 0s",
 	})
@@ -154,7 +154,7 @@ end)
 t.test("the subagent omp shows keeps its line when stopped, next to the running ones of an open strip", function()
 	local out = showing({ sub("Ticket03"), sub("Ticket07", 1, { status = "aborted" }) }, "Ticket07", 7)
 	t.eq(visible.agentRows(out), {
-		":terminal(Working) Lead [▮] 0s",
+		":terminal(Working) Lead [:chev] 0s",
 		"■(Not live) Ticket03 task",
 		"■(Stopped) Ticket07 task",
 		":terminal(Working) Other 0s",
@@ -220,7 +220,7 @@ t.test("while another agent is focused, its row stays the selected one and the s
 	t.eq(visible.selected(out), { ":terminal(Working) Other 0s" })
 	t.eq(visible.agentRows(out), visible.agentRows(after(nil, dock({ "Ticket07" }), 7)))
 	t.eq(visible.agentRows(out), {
-		":terminal(Working) Lead [▮ ▮ ▮] 0s",
+		":terminal(Working) Lead [:chev] 0s",
 		"■(Not live) Ticket03 task",
 		"■(Running) Ticket07 task",
 		"■(Not live) Ticket04 task",
@@ -229,7 +229,7 @@ t.test("while another agent is focused, its row stays the selected one and the s
 end)
 
 t.test("a shown subagent the last read did not list leaves the agent's row selected", function()
-	t.eq(visible.selected(after(nil, dock({ "Gone" }), 7)), { ":terminal(Working) Lead [▮ ▮ ▮] 0s" })
+	t.eq(visible.selected(after(nil, dock({ "Gone" }), 7)), { ":terminal(Working) Lead [:chev] 0s" })
 end)
 
 return nil
