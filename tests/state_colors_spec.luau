@@ -52,7 +52,7 @@ t.test("each subagent state puts its own state on its line's square", function()
 		"waiting: ■ Needs you 1",
 		"waiting: ■(Waiting for you) C in Lead",
 		"working: ■ Working 1 busy",
-		"working: :terminal(Working) Lead [:chev] 0s",
+		"working: :terminal(Working) Lead 0s [:chev]",
 		"running: ■(Running) A",
 		"running: ■(Running) B",
 		"waiting: ■(Waiting for you) C Ask Which one?",

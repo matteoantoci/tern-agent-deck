@@ -347,11 +347,13 @@ local ROLE = {
 	time = "agents.time",
 	meta = "agents.meta",
 	hover = "agents.hover",
-	--- The strip at the end of an agent's row while its lines are folded; `agents.strip.open` while they show (a
-	--- chevron that shows only on row hover).
+	--- The passive strip after an agent's title while its lines are folded: it takes no click.
 	strip = "agents.strip",
 	--- The strip's "N subagents", shown when no subagent runs but some wait or are queued.
 	tally = "agents.tally",
+	--- The chevron that shows or hides an agent's subagent lines. It sits in the row's time slot and shows in place of
+	--- the time on row hover or focus (`agents.toggle.open` while the lines show, `agents.toggle.closed` while folded).
+	toggle = "agents.toggle.",
 	--- One bar of the strip, per running subagent (`agents.bar.running`).
 	bar = "agents.bar.",
 	--- The strip's "+N", for the running subagents past the last bar.
@@ -683,8 +685,8 @@ end
 -- a resume icon that shows on hover. A row carries no tooltip: its hover card holds every fact: the state and its time
 -- (the live turn timer while it works), the tab, the title, the summary or last message, the kind, the model and
 -- effort, whether it is pinned, the subagent counts (`crew`, nil for an agent with no subagents) and a hint of what a
--- click and a right-click do.
-local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number, crew: string?): Node
+-- click and a right-click do (with `toggle`, also what the subagent chevron does).
+local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number, crew: string?, toggle: boolean?): Node
 	local shown = shownState(agent, shared)
 	local children: { Node } = { titleIcon(agent.title, shown.state, shown.label), nameNode(rowTitle(agent, shared)) }
 	if shown.seconds then
@@ -731,7 +733,7 @@ local function row(agent: Agent, shared: Shared, pinned: boolean, depth: number,
 			facts = facts,
 			cost = costLines(agent.sessionFile and shared.cost[agent.sessionFile]),
 			crew = crew,
-			hint = hintText(clickText(agent), items),
+			hint = hintText(clickText(agent), items) .. (if toggle then " · Chevron: show or hide subagents" else ""),
 		}),
 	}
 	return { k = "row", p = props, c = children }
@@ -1172,24 +1174,18 @@ local function crewText(crew: Crew): string
 	return table.concat(parts, " · ")
 end
 
--- The strip at the end of an agent's row, while a subagent runs, waits or is queued. Folded: one bar in the working
--- color per running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral "N subagents" for the
--- ones that wait or are queued; a click shows the subagent lines (`subs=<pane> open`). Open: the lines show the
--- subagents, so the slot holds only a chevron, which `agents.css` shows while the pointer or the focus is on the row;
--- a click folds the lines (`subs=<pane> closed`). Nil when every subagent finished: then the agent has no subagent
--- lines to show or hide. The tooltip lists every count and says what a click does.
-local function stripNode(pane: string, crew: Crew, open: boolean): Node?
+-- The strip after an agent's title while its lines are folded, while a subagent runs, waits or is queued: one bar in
+-- the working color per running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral
+-- "N subagents" for the ones that wait or are queued. It only shows the counts and takes no click. Nil while the
+-- lines show, or when no subagent runs, waits or is queued.
+local function stripNode(crew: Crew, open: boolean): Node?
 	local running = crew.running
 	local pending = crew.waiting + crew.queued
-	if running == 0 and pending == 0 then
+	if open or (running == 0 and pending == 0) then
 		return nil
 	end
-	local title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them")
-	local click = "subs=" .. pane .. (if open then " closed" else " open")
 	local children: { Node } = {}
-	if open then
-		table.insert(children, chevron(true))
-	elseif running > 0 then
+	if running > 0 then
 		for _ = 1, math.min(running, STRIP_BARS) do
 			table.insert(children, { k = "text", p = { text = "▮", wrap = "none", role = ROLE.bar .. "running" } })
 		end
@@ -1201,14 +1197,25 @@ local function stripNode(pane: string, crew: Crew, open: boolean): Node?
 	end
 	return {
 		k = "row",
-		p = {
-			key = "strip",
-			gap = "none",
-			role = if open then ROLE.strip .. ".open" elseif running > 0 then ROLE.strip else ROLE.tally,
-			title = title,
-			actions = { click = click },
-		},
+		p = { key = "strip", gap = "none", role = if running > 0 then ROLE.strip else ROLE.tally, title = crewText(crew) },
 		c = children,
+	}
+end
+
+-- The chevron that shows or hides the subagent lines, in the row's time slot (`agents.css` shows it in place of the
+-- time while the pointer or the focus is on the row): right-pointing while folded, a click shows the lines
+-- (`subs=<pane> open`); down-pointing while they show, a click hides them (`subs=<pane> closed`).
+local function toggleNode(pane: string, crew: Crew, open: boolean): Node
+	return {
+		k = "row",
+		p = {
+			key = "toggle",
+			gap = "none",
+			role = ROLE.toggle .. (if open then "open" else "closed"),
+			title = crewText(crew) .. (if open then ". Click: hide them" else ". Click: show them"),
+			actions = { click = "subs=" .. pane .. (if open then " closed" else " open") },
+		},
+		c = { chevron(open) },
 	}
 end
 
@@ -1296,13 +1303,14 @@ local function drawnSubs(subs: { subagents.Subagent }, shown: string?, limit: nu
 	return drawn, math.max(0, #candidates - limit)
 end
 
--- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents in tree
--- order (each one after the one it runs under, siblings in the order the reader first saw them, see `ordered`), one step down per nesting level:
--- every one not finished while the lines are open (`agents.strip.open`), else only the failed ones (a failure never
+-- The agent's row at `depth`, with the folded subagent strip after its title and the chevron in its time slot, and
+-- below it the lines of its subagents in tree order (each one after the one it runs under, siblings in the order the
+-- reader first saw them, see `ordered`), one step down per nesting level:
+-- every one not finished while the lines are open (`agents.toggle.open`), else only the failed ones (a failure never
 -- hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see `drawnSubs`), then a muted
 -- "+N more" line. A warning line says when Tern cut the read, and one that +N running subagents sit past the levels
 -- omp renders. The lines are open for every agent until the user closes them (`subsClosed`), so that no line moves
--- when its state, the focus or the subagent omp shows changes. With no strip (no subagent runs, waits or is queued),
+-- when its state, the focus or the subagent omp shows changes. With no toggle (no subagent runs, waits or is queued),
 -- nothing can hide the lines that are left. This tab's agent, and its open lines, are one block, which `agents.css`
 -- draws with the accent.
 local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, pinned: boolean, depth: number): Node
@@ -1311,15 +1319,18 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	end
 	local pane = string.format("%.0f", agent.pane)
 	local crew = count(subs)
-	local main = row(agent, shared, pinned, depth, crewText(crew))
-	local open = not shared.subsClosed[agent.pane]
-	-- The strip goes right after the name, before the time.
-	local strip = stripNode(pane, crew, open)
-	if strip then
-		table.insert(main.c :: { Node }, 3, strip)
-	else
-		-- Only the failed lines and the shown one are left, and they keep their places in the tree.
-		open = true
+	-- Only an agent with a subagent that runs, waits or is queued can hide its lines. Without one, only the failed
+	-- lines and the shown one are left, and they keep their places in the tree.
+	local toggle = crew.running + crew.waiting + crew.queued > 0
+	local main = row(agent, shared, pinned, depth, crewText(crew), toggle)
+	local open = not toggle or not shared.subsClosed[agent.pane]
+	if toggle then
+		-- The folded strip goes right after the name; the chevron goes last, in the time slot.
+		local strip = stripNode(crew, open)
+		if strip then
+			table.insert(main.c :: { Node }, 3, strip)
+		end
+		table.insert(main.c :: { Node }, toggleNode(pane, crew, open))
 	end
 	local lines: { Node } = { main }
 	local deeper = 0

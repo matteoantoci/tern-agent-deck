@@ -67,7 +67,7 @@ t.test("a working agent's card: state with its live timer and the tab, title, me
 			"Running the tests.",
 			"omp · anthropic/claude-opus-5-5 high",
 			"Subagents: 2 running · 1 done",
-			"Click: go to it · Right-click: Pin, Rename, Copy session ID or path, Interrupt",
+			"Click: go to it · Right-click: Pin, Rename, Copy session ID or path, Interrupt · Chevron: show or hide subagents",
 		}, "\n")
 	)
 end)
