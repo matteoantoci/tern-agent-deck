@@ -1215,9 +1215,49 @@ local VIEW_SUB_LINES = 100
 -- The subagents of `subs` that get a line (see `lined`), at most `limit`: first the one the pane shows, then the
 -- failed ones (a failure never hides), then the newest of the others (running, waiting, queued). Also how many get
 -- none. The rank only picks the lines that stay: they draw in tree order.
-local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
+-- The subagents of `subs` in tree order (each one after the one it runs under), siblings in the order the reader first
+-- saw them (`firstSeen`, then omp id): omp's tray order can change with their state, and a line must not move then.
+-- One with no `firstSeen` keeps its tray place. An ancestor missing from the read takes its child's place.
+local function ordered(subs: subagents.Subagents): { subagents.Subagent }
+	local byId: { [string]: subagents.Subagent } = {}
+	local place: { [subagents.Subagent]: number } = {}
+	for i, sub in subs.agents do
+		byId[sub.id] = sub
+		place[sub] = i
+	end
+	local paths: { [subagents.Subagent]: { { seen: number, place: number, id: string } } } = {}
+	for _, sub in subs.agents do
+		local path = {}
+		local levels = string.split(sub.id, ".")
+		for i = 1, #levels do
+			local id = table.concat(levels, ".", 1, i)
+			local at = byId[id] or sub
+			table.insert(path, { seen = at.firstSeen or math.huge, place = if at.firstSeen then 0 else place[at], id = id })
+		end
+		paths[sub] = path
+	end
+	local out = table.clone(subs.agents)
+	table.sort(out, function(a, b)
+		local x, y = paths[a], paths[b]
+		for i = 1, math.min(#x, #y) do
+			if x[i].seen ~= y[i].seen then
+				return x[i].seen < y[i].seen
+			end
+			if x[i].place ~= y[i].place then
+				return x[i].place < y[i].place
+			end
+			if x[i].id ~= y[i].id then
+				return x[i].id < y[i].id
+			end
+		end
+		return #x < #y
+	end)
+	return out
+end
+
+local function drawnSubs(subs: { subagents.Subagent }, shown: string?, limit: number): ({ [subagents.Subagent]: boolean }, number)
 	local candidates: { { sub: subagents.Subagent, index: number, rank: number } } = {}
-	for index, sub in subs.agents do
+	for index, sub in subs do
 		if lined(sub, shown) then
 			local rank = if viewing.shows(sub, shown) then 2 elseif sub.status == "failed" then 1 else 0
 			table.insert(candidates, { sub = sub, index = index, rank = rank })
@@ -1243,7 +1283,7 @@ local function drawnSubs(subs: subagents.Subagents, shown: string?, limit: numbe
 end
 
 -- The agent's row at `depth`, with the subagent strip at its end, and below it the lines of its subagents in tree
--- order (each one after the one it runs under, siblings in the order the tray gives), one step down per nesting level:
+-- order (each one after the one it runs under, siblings in the order the reader first saw them, see `ordered`), one step down per nesting level:
 -- every one not finished while the lines are open (`agents.strip.open`), else only the failed ones (a failure never
 -- hides), at most `SUB_LINES` of them and what is left of the view's `VIEW_SUB_LINES` (see `drawnSubs`), then a muted
 -- "+N more" line. A warning line says when Tern cut the read, and one that +N running subagents sit past the levels
@@ -1273,8 +1313,9 @@ local function entry(agent: Agent, shared: Shared, subs: subagents.Subagents?, p
 	-- line like a failure under a closed strip. In the focused pane it takes the selection from its agent's row.
 	local viewed = shared.viewing[agent.pane]
 	local shown = if shared.focused == agent.pane then viewed else nil
-	local drawn, past = drawnSubs(subs, viewed, math.min(SUB_LINES, shared.subLines))
-	for _, sub in subs.agents do
+	local tree = ordered(subs)
+	local drawn, past = drawnSubs(tree, viewed, math.min(SUB_LINES, shared.subLines))
+	for _, sub in tree do
 		if sub.depth > MAX_DEPTH then
 			if sub.status == "running" then
 				deeper += 1
