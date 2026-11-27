@@ -413,58 +413,57 @@
 }
 
 /* The subagent strip after an agent's title, while the lines are folded: one 3×12 bar in the working color per
-   running subagent, then "+N"; with none running, a neutral "N subagents" for the ones that wait or are queued. A
-   click shows the subagent lines. */
-[data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']) {
+   running subagent, then "+N"; with none running, a neutral "N subagents" for the ones that wait or are queued. It
+   only shows the counts: the chevron in the time slot shows the lines. */
+[data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally']) {
 	flex: none;
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	height: 20px;
-	padding: 0 4px;
-	border-radius: var(--r-chip);
-	cursor: pointer;
 	font: 400 11px/16px var(--tv-font, var(--mono));
 	font-variant-numeric: tabular-nums;
 	color: var(--t3);
 }
 
-[data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']):hover {
+/* The chevron that shows or hides the subagent lines. It sits over the row's time slot at the right end and takes
+   no width, so nothing moves: on row hover or focus the time fades out and the chevron fades in. */
+[data-role='agents.root'] [data-role^='agents.toggle.'] {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 20px;
+	padding: 0;
+	border-radius: var(--r-chip);
+	cursor: pointer;
+	color: var(--t3);
+	opacity: 0;
+	transition: opacity 0.15s var(--ease);
+}
+
+[data-role='agents.root'] [data-role^='agents.toggle.']:hover {
 	box-shadow: inset 0 0 0 1px var(--l2);
 	color: var(--t1);
 }
 
-/* The folded strip's hit area: at least 24px wide and the full 28px row height. It extends toward the title over the
-   row gap, so the bars stay where they are and the title keeps its width. */
-[data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally']) {
-	position: relative;
+[data-role='agents.root'] [data-role^='agents.toggle.'] [data-role='agents.chev'] {
+	color: inherit;
 }
 
-[data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally'])::before {
-	content: '';
-	position: absolute;
-	top: -4px;
-	bottom: -4px;
-	right: 0;
-	width: max(100%, 24px);
+[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):has(> [data-role^='agents.toggle.']) [data-role='agents.time'] {
+	transition: opacity 0.15s var(--ease);
 }
 
-/* While the lines show, the strip is only a chevron that folds them. At rest it takes no width, so the title keeps
-   its full width. On row hover or focus the chevron takes the place of the row's time, at the right end. */
-[data-role='agents.root'] [data-role='agents.strip.open'] {
-	display: none;
-	justify-content: center;
-	width: 24px;
-	margin-left: auto;
-	padding: 0;
+[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within) > [data-role^='agents.toggle.'] {
+	opacity: 1;
 }
 
-[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within) [data-role='agents.strip.open'] {
-	display: flex;
-}
-
-[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within):has([data-role='agents.strip.open']) [data-role='agents.time'] {
-	display: none;
+[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.']):is(:hover, :focus-within):has(> [data-role^='agents.toggle.']) [data-role='agents.time'] {
+	opacity: 0;
 }
 
 [data-role='agents.bar.running'] {

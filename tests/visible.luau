@@ -108,7 +108,7 @@ local function part(n: Node): string?
 end
 
 -- A row inside a row that takes a click and is no list row (no `agents.<kind>.<depth>` role): a control of its row,
--- as a button is (the subagent strip), not a row of its own.
+-- as a button is (the subagent chevron), not a row of its own.
 local function isControl(n: Node): boolean
 	local p = props(n)
 	local role = p.role
@@ -118,9 +118,16 @@ local function isControl(n: Node): boolean
 		and not (type(role) == "string" and string.match(role, "^agents%.%a+%.%d+$"))
 end
 
+-- The folded subagent strip (`agents.strip`, `agents.tally`): a row inside its agent's row that takes no click, read
+-- as parts of that row.
+local function isStrip(n: Node): boolean
+	local role = props(n).role
+	return n.k == "row" and (role == "agents.strip" or role == "agents.tally")
+end
+
 local function hasRow(n: Node): boolean
 	for _, child in kids(n) do
-		if (child.k == "row" and not isControl(child)) or hasRow(child) then
+		if (child.k == "row" and not isControl(child) and not isStrip(child)) or hasRow(child) then
 			return true
 		end
 	end
