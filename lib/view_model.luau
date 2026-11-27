@@ -1177,7 +1177,9 @@ end
 -- The strip after an agent's title while its lines are folded, while a subagent runs, waits or is queued: one bar in
 -- the working color per running subagent, at most `STRIP_BARS`, then "+N"; with none running, a neutral
 -- "N subagents" for the ones that wait or are queued. It only shows the counts and takes no click. Nil while the
--- lines show, or when no subagent runs, waits or is queued.
+-- lines show, or when no subagent runs, waits or is queued. Each bar is a `span` element with no text, which
+-- `agents.css` sizes: a text glyph made small with `font-size: 0` kept line metrics that put it 1pt low when the
+-- strip first showed, until the row drew again.
 local function stripNode(crew: Crew, open: boolean): Node?
 	local running = crew.running
 	local pending = crew.waiting + crew.queued
@@ -1187,7 +1189,7 @@ local function stripNode(crew: Crew, open: boolean): Node?
 	local children: { Node } = {}
 	if running > 0 then
 		for _ = 1, math.min(running, STRIP_BARS) do
-			table.insert(children, { k = "text", p = { text = "▮", wrap = "none", role = ROLE.bar .. "running" } })
+			table.insert(children, { k = "el", p = { tag = "span", role = ROLE.bar .. "running" } })
 		end
 		if running > STRIP_BARS then
 			table.insert(children, { k = "text", p = { text = "+" .. tostring(running - STRIP_BARS), role = ROLE.more } })

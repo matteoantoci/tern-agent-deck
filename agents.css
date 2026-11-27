@@ -414,16 +414,22 @@
 
 /* The subagent strip after an agent's title, while the lines are folded: one 3×12 bar in the working color per
    running subagent, then "+N"; with none running, a neutral "N subagents" for the ones that wait or are queued. It
-   only shows the counts: the chevron in the time slot shows the lines. */
+   only shows the counts: the chevron in the time slot shows the lines. The strip's line height is 0, so that its box
+   has no strut; each text in it sets its own 16px line, centered in the 20px strip as the bars are. */
 [data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally']) {
 	flex: none;
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	height: 20px;
-	font: 400 11px/16px var(--tv-font, var(--mono));
+	font: 400 11px/0 var(--tv-font, var(--mono));
 	font-variant-numeric: tabular-nums;
 	color: var(--t3);
+}
+
+[data-role='agents.root'] :is([data-role='agents.strip'], [data-role='agents.tally']) > :not([data-role^='agents.bar.']) {
+	flex: none;
+	line-height: 16px;
 }
 
 /* The chevron that shows or hides the subagent lines, in the row's time slot at the right end. It stays in the row's
@@ -463,13 +469,12 @@
 	display: none;
 }
 
+/* A bar is an element with no text: its box is fixed, and no font or line height changes its size or place. */
 [data-role='agents.bar.running'] {
 	flex: none;
+	display: block;
 	width: 3px;
 	height: 12px;
-	overflow: hidden;
-	font-size: 0;
-	line-height: 0;
 	background: var(--live);
 }
 
