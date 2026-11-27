@@ -2012,7 +2012,23 @@ end
 
 -- The Recent view: the closed sessions by day (Today, Yesterday, This week), each day its count and its projects
 -- (see `recentProjects`), then "Earlier" folded with its count; each day hidden while empty. A calm line shows while
--- there is no closed session.
+-- there is no closed session. A day shows at most its `RECENT_CAP` newest sessions, then one muted "N more" line
+-- that takes no click: a canvas update holds at most 2000 nodes.
+local RECENT_CAP = 50
+
+local function recentDay(key: string, sessions: { Session }, input: Input): { Node }
+	local shown = sessions
+	if #sessions > RECENT_CAP then
+		shown = table.move(sessions, 1, RECENT_CAP, 1, {})
+	end
+	local body = recentProjects(shown, input)
+	if #sessions > RECENT_CAP then
+		local text = string.format("%d more", #sessions - RECENT_CAP)
+		table.insert(body, infoLine(key .. "-more", iconNode("more", "muted"), text, "muted", 0))
+	end
+	return body
+end
+
 local function recentBody(input: Input): { Node }
 	local closed = closedSessions(input.sessions or {}, input.agents)
 	local days = recentDays(input.time)
@@ -2034,12 +2050,12 @@ local function recentBody(input: Input): { Node }
 		if #sessions > 0 then
 			local key = "day-" .. string.lower((string.gsub(day.name, " ", "-")))
 			if day.name ~= "Earlier" then
-				table.insert(children, zone(key, nil, day.name, tostring(#sessions), recentProjects(sessions, input)))
+				table.insert(children, zone(key, nil, day.name, tostring(#sessions), recentDay(key, sessions, input)))
 			else
 				local open = input.earlierOpen == true
 				local body: { Node } = { foldRow("head", "Earlier", #sessions, open, "earlier", 0) }
 				if open then
-					for _, project in recentProjects(sessions, input) do
+					for _, project in recentDay(key, sessions, input) do
 						table.insert(body, project)
 					end
 				end

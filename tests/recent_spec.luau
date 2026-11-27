@@ -178,4 +178,38 @@ t.test("the Live view lists no closed session", function()
 	t.eq(visible.zones(view({ agent({}) }, { session(1, "Plan", HOUR) }, { view = "live" })), { "■ Idle 1" })
 end)
 
+-- A canvas update holds at most 2000 nodes, so a day shows at most its 50 newest sessions and then one muted
+-- "N more" line that takes no click.
+local function count(node: any): number
+	local n = 1
+	for _, child in (node.c or {}) :: { any } do
+		n += count(child)
+	end
+	return n
+end
+
+t.test("an open Earlier with 500 sessions shows its 50 newest, then one line for the rest", function()
+	local many: { any } = {}
+	for n = 1, 500 do
+		table.insert(many, session(n, "Old " .. n, 8 * DAY + n * HOUR, { file = SESSIONS .. n .. ".jsonl" }))
+	end
+	local shown = view({}, many, { earlierOpen = true })
+	t.eq(count(shown) < 1500, true)
+	local lines = visible.zone(shown, "Earlier")
+	t.eq(lines[#lines], ":more 450 more")
+	t.eq(lines[2], line("Old 1", "8d", false))
+	t.eq(lines[51], line("Old 50", "10d", false))
+	t.eq(visible.click(shown, "450 more"), nil)
+end)
+
+t.test("a day with more than 50 sessions is capped the same way", function()
+	local many: { any } = {}
+	for n = 1, 60 do
+		table.insert(many, session(n, "T" .. n, n * MIN, { file = SESSIONS .. n .. ".jsonl" }))
+	end
+	local lines = visible.zone(view({}, many), "Today")
+	t.eq(#lines, 52)
+	t.eq(lines[52], ":more 10 more")
+end)
+
 return nil
