@@ -58,6 +58,18 @@ t.test("a quota at its limit shows an error square", function()
 	t.eq(visible.state(out, "Claude · work · 5h 100%"), "failed")
 end)
 
+t.test("the qualifier shows on the line and in the tooltip, and the reset is the part cut first", function()
+	local out = view({
+		quota({ label = "7d Fable", used = 0.97, status = "warning" }),
+		quota({ label = "7d", used = 0.95, status = "warning" }),
+	})
+	t.eq(visible.chrome(out), { SWITCH, "■ Claude · work · 7d Fable 97% · resets Sun +1" })
+	t.eq(visible.titles(out, "7d Fable 97%"), {
+		"Claude · work · 7d Fable 97% · resets Sun\nClaude · work · 7d 95% · resets Sun",
+	})
+	t.eq(visible.secondary(out, "· resets Sun"), true)
+end)
+
 t.test("the worst quota shows first, exhausted before warning and then the higher use, with +N for the others", function()
 	local out = view({
 		quota({ account = "home", used = 0.91, status = "warning", left = 3 * HOUR }),

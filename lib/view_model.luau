@@ -1691,22 +1691,21 @@ local function viewButton(label: string, view: View, shown: View): Node
 	}
 end
 
--- A quota as one line: `Claude · work · 7d 97% · resets Sun`. The reset reads as a weekday when a day or more away,
--- else as the time left (`resets in 38m`).
-local function quotaText(quota: Quota, left: number): string
+-- A quota as one line, in two parts: `Claude · work · 7d Fable 97%` and its reset, `· resets Sun`. The reset reads as
+-- a weekday when a day or more away, else as the time left (`resets in 38m`).
+local function quotaText(quota: Quota, left: number): (string, string)
 	local parts = { quota.provider }
 	if quota.account then
 		table.insert(parts, quota.account)
 	end
 	table.insert(parts, string.format("%s %d%%", quota.label, math.round(quota.used * 100)))
 	local reset = if left >= DAY then os.date("%a", quota.resetsAt // 1000) else "in " .. duration(left)
-	table.insert(parts, "resets " .. reset)
-	return table.concat(parts, " · ")
+	return table.concat(parts, " · "), "· resets " .. reset
 end
 
 -- The quota line under the Live/Recent switch: the worst quota near or at its limit (exhausted before warning, then
 -- the higher use) after a square in the warning or the error color, "+N" for the others, and all of them in the
--- tooltip; nil while every quota is fine.
+-- tooltip; nil while every quota is fine. When the line is too narrow, its reset is the part cut first.
 local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	if not time then
 		return nil
@@ -1717,12 +1716,15 @@ local function quotaLine(quotas: { Quota }?, time: number?): Node?
 	end
 	local lines: { string } = {}
 	for _, entry in hot do
-		table.insert(lines, quotaText(entry.quota, entry.left))
+		local main, reset = quotaText(entry.quota, entry.left)
+		table.insert(lines, main .. " " .. reset)
 	end
-	local worst = hot[1].quota
+	local worst = hot[1]
+	local main, reset = quotaText(worst.quota, worst.left)
 	local parts: { Node } = {
-		squareNode(if worst.status == "exhausted" then "failed" else "waiting"),
-		nameNode(lines[1]),
+		squareNode(if worst.quota.status == "exhausted" then "failed" else "waiting"),
+		nameNode(main, nil, true),
+		detailNode(reset),
 	}
 	if #hot > 1 then
 		table.insert(parts, { k = "text", p = { text = "+" .. tostring(#hot - 1), wrap = "none", role = ROLE.meta } })

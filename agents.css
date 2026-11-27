@@ -51,6 +51,11 @@
 	color: var(--t2);
 }
 
+/* The reset takes only the room left after the rest of the line, so it is cut first; the tooltip keeps it whole. */
+[data-role='agents.quota'] [data-role='agents.detail'] {
+	color: inherit;
+}
+
 [data-role='agents.root'] :is([data-role='agents.view'], [data-role='agents.view.on']) {
 	height: 40px;
 	min-width: 0;
