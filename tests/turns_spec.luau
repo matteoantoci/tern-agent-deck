@@ -30,7 +30,7 @@ local function timers(starts: turns.Starts, agents: { { [string]: any } }, now: 
 	local out: { string } = {}
 	for _, agent in agents do
 		local card = visible.hover(view, "(Working) " .. agent.title) or ""
-		table.insert(out, agent.title .. " " .. (string.match(card, "· Working (⏱%d+s)") or "no timer"))
+		table.insert(out, agent.title .. " " .. (string.match(card, "^[^\n]* Working (⏱%d+s)") or "no timer"))
 	end
 	return out
 end
