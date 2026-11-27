@@ -41,31 +41,27 @@ t.test("a stopped pinned agent puts the stopped state on its title icon", functi
 	t.eq(visible.state(out, ") Done"), "stopped")
 end)
 
-t.test("each subagent state puts its own state on its dot or on the finished line's icon", function()
-	local function view(subs: { any }): any
-		return viewModel.build({
-			agents = { agent(7, "working", "Lead") },
-			now = 0,
-			subagents = { [7] = { agents = subs, incomplete = false } },
-		}).view
-	end
-	local live = view({ sub("A", "running"), sub("B", "running", { waiting = true }) })
+t.test("each subagent state puts its own state on its line's square", function()
+	local live = viewModel.build({
+		agents = { agent(7, "working", "Lead") },
+		now = 0,
+		focused = 7,
+		subagents = { [7] = { agents = { sub("A", "running"), sub("B", "running", { waiting = true }) }, incomplete = false } },
+	}).view
 	t.eq(visible.states(live), {
 		"working: ■ Working 1 busy",
-		"working: :sparkle(Working) Lead 0s",
-		"running: ●(Running) A",
-		"waiting: ●(Waiting on its subagents) B",
+		"working: :sparkle(Working) Lead [▮] 0s",
+		"running: ■(Running) A",
+		"waiting: ■(Waiting on its subagents) B",
 	})
-	t.eq(visible.state(view({ sub("A", "done") }), "1 subagent done"), "done")
-	t.eq(visible.state(view({ sub("A", "done"), sub("B", "failed") }), "1 subagent done, 1 failed"), "failed")
-	t.eq(visible.state(view({ sub("A", "done"), sub("B", "aborted") }), "1 subagent done, 1 stopped"), "stopped")
 end)
 
-t.test("no title icon, square, state dot or state icon takes a Tern tone or span style, so no state uses the accent", function()
+t.test("no title icon, square or strip bar takes a Tern tone or span style, so no state uses the accent", function()
 	local out = viewModel.build({
 		agents = { agent(1, "working", "a"), agent(2, "waiting_input", "b"), agent(3, "idle", "c"), agent(7, "working", "Lead") },
 		pins = { { pane = 9, title = "d", cwd = "/repo" } },
 		now = 0,
+		subsOpen = { [7] = true },
 		subagents = {
 			[7] = {
 				agents = { sub("A", "running"), sub("B", "running", { waiting = true }), sub("C", "done"), sub("D", "failed") },

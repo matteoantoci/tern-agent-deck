@@ -40,7 +40,8 @@ The sidebar opens on the right edge of each tab. Press **⌥⌘A** to show or hi
 | --- | --- |
 | An agent row | Focuses that agent. It switches the session or brings a parked pane back. If omp shows a subagent, omp goes back to the main session. |
 | A pinned agent that stopped | Resumes its session in a new tab with `omp --resume`. The pin moves to the resumed agent. |
-| A subagent row | Opens that subagent in omp's view. |
+| The subagent strip after an agent's title (its bars, or **N done**) | Shows or hides that agent's subagent lines. This tab's agent starts with them shown. A failed subagent always shows. |
+| A subagent line | Opens that subagent in omp's view. |
 | A folder row | Folds or opens the folder. |
 | `+` on a folder row | Opens a new tab in that folder. |
 | **Older** | Shows or hides the idle agents of that folder whose last turn ended more than 1 day ago. |
@@ -76,7 +77,7 @@ Rename is available for running omp agents. It is off while omp shows a subagent
 ## ⚙️ How it works
 
 - The plugin opens one canvas per tab, on the right edge.
-- It reads Tern's agent list and omp's tray of subagents in each agent's dock, so a subagent that a message wakes again shows as running too. It sends events to an agent only when you click Interrupt, Rename, a subagent row, or an agent row while omp shows a subagent.
+- It reads Tern's agent list and omp's tray of subagents in each agent's dock, so a subagent that a message wakes again shows as running too. It sends events to an agent only when you click Interrupt, Rename, a subagent line, or an agent row while omp shows a subagent.
 - It finds closed sessions in `~/.omp/agent/sessions`, and the session file of each live agent in `tern inspect --json`.
 - It keeps pins, folds, the view and the width in `tern.kv`. All windows share this state.
 - It runs local commands only, with one exception: a long last message of an agent (up to 8,000 bytes) goes to the model of omp's `@smol` role, through omp, for the summary in the row's card. That model's provider receives the text.

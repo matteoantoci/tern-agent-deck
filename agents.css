@@ -158,9 +158,9 @@
 	margin-top: 12px;
 }
 
-/* A row one level below an agent (a subagent, a done or incomplete line) or below a Recent folder (a session): 24px,
-   12px text, its icon under the agent's title. */
-[data-role='agents.root'] :is([data-role$='.1'], [data-role$='.2']):is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+/* A row below an agent (a subagent line, a deeper or incomplete line) or below a Recent folder (a session): 24px,
+   12px text. Depth 1 starts under the agent's title; each level down is 16px further in. */
+[data-role='agents.root'] :is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']):not([data-role$='.0']) {
 	height: 24px;
 	padding-left: 32px;
 	font-size: 12px;
@@ -169,6 +169,34 @@
 
 [data-role='agents.root'] [data-role$='.2']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
 	padding-left: 48px;
+}
+
+[data-role='agents.root'] [data-role$='.3']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 64px;
+}
+
+[data-role='agents.root'] [data-role$='.4']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 80px;
+}
+
+[data-role='agents.root'] [data-role$='.5']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 96px;
+}
+
+[data-role='agents.root'] [data-role$='.6']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 112px;
+}
+
+[data-role='agents.root'] [data-role$='.7']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 128px;
+}
+
+[data-role='agents.root'] [data-role$='.8']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 144px;
+}
+
+[data-role='agents.root'] [data-role$='.9']:is([data-role^='agents.item.'], [data-role^='agents.on.'], [data-role^='agents.info.']) {
+	padding-left: 160px;
 }
 
 /* Hover: an inset hairline, and the text at full strength. */
@@ -256,12 +284,12 @@
 	color: var(--t3);
 }
 
-:is([data-role='agents.icon'], [data-role^='agents.mark.'], [data-role^='agents.glyph.']) svg {
+:is([data-role='agents.icon'], [data-role^='agents.glyph.']) svg {
 	width: 14px;
 	height: 14px;
 }
 
-:is([data-role='agents.icon'], [data-role^='agents.mark.']) {
+[data-role='agents.icon'] {
 	flex: none;
 	display: grid;
 	place-items: center;
@@ -284,7 +312,7 @@
 	height: 12px;
 }
 
-/* A subagent's state dot: a `●`/`○` glyph in an 8px box. */
+/* A closed session's dot: a `○` glyph in an 8px box. */
 [data-role^='agents.dot.'] {
 	flex: none;
 	display: grid;
@@ -295,7 +323,7 @@
 	line-height: 1;
 }
 
-/* A zone head's square: the text node's glyph is hidden, and the box is the square. */
+/* A zone head's or a subagent line's square: the text node's glyph is hidden, and the box is the square. */
 [data-role^='agents.square.'] {
 	flex: none;
 	width: 6px;
@@ -307,39 +335,26 @@
 	background: var(--t4);
 }
 
-/* Each state's color, by the state at the end of the role of its title icon (`agents.glyph.<state>`), square
-   (`agents.square.<state>`), dot (`agents.dot.<state>`) or icon (`agents.mark.<state>`). States take Tern's state
-   tokens, not its tones: working --live, waiting --warn, done --ok, failed --bad; idle and stopped stay neutral. */
-:is([data-role='agents.glyph.working'], [data-role='agents.dot.working'], [data-role='agents.dot.running']) {
+/* Each state's color, by the state at the end of the role of its title icon (`agents.glyph.<state>`) or square
+   (`agents.square.<state>`). States take Tern's state tokens, not its tones: working and running --live, waiting
+   --warn, done --ok, failed --bad; idle and stopped stay neutral. */
+[data-role='agents.glyph.working'] {
 	color: var(--live);
 }
 
-:is([data-role='agents.glyph.waiting'], [data-role='agents.dot.waiting'], [data-role='agents.mark.waiting']) {
+[data-role='agents.glyph.waiting'] {
 	color: var(--warn);
 }
 
-[data-role='agents.mark.done'] {
-	color: var(--ok);
-}
-
-[data-role='agents.mark.failed'] {
-	color: var(--bad);
-}
-
-:is([data-role='agents.glyph.idle'], [data-role='agents.dot.idle']) {
+[data-role='agents.glyph.idle'] {
 	color: var(--t3);
 }
 
-:is(
-		[data-role='agents.glyph.stopped'],
-		[data-role='agents.dot.exited'],
-		[data-role='agents.dot.frozen'],
-		[data-role='agents.mark.stopped']
-	) {
+:is([data-role='agents.glyph.stopped'], [data-role='agents.dot.exited']) {
 	color: var(--t4);
 }
 
-[data-role='agents.square.working'] {
+:is([data-role='agents.square.working'], [data-role='agents.square.running']) {
 	background: var(--live);
 }
 
@@ -347,13 +362,56 @@
 	background: var(--warn);
 }
 
+[data-role='agents.square.done'] {
+	background: var(--ok);
+}
+
 [data-role='agents.square.failed'] {
 	background: var(--bad);
 }
 
-[data-role='agents.square.idle'] {
+[data-role='agents.square.stopped'] {
+	background: var(--t4);
+}
+
+:is([data-role='agents.square.idle'], [data-role='agents.square.frozen']) {
 	background: transparent;
 	box-shadow: inset 0 0 0 1px var(--t3);
+}
+
+/* The subagent strip after an agent's title: one 3×12 bar in the working color per running subagent, then "+N";
+   with none running, a neutral "N done". A click shows or hides the subagent lines. */
+[data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']) {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 20px;
+	padding: 0 4px;
+	border-radius: var(--r-chip);
+	cursor: pointer;
+	font: 400 11px/16px var(--tv-font, var(--mono));
+	font-variant-numeric: tabular-nums;
+	color: var(--t3);
+}
+
+[data-role='agents.root'] :is([data-role^='agents.strip'], [data-role='agents.tally']):hover {
+	box-shadow: inset 0 0 0 1px var(--l2);
+	color: var(--t1);
+}
+
+[data-role='agents.bar.running'] {
+	flex: none;
+	width: 3px;
+	height: 12px;
+	overflow: hidden;
+	font-size: 0;
+	line-height: 0;
+	background: var(--live);
+}
+
+[data-role='agents.more'] {
+	margin-left: 2px;
 }
 
 /* The one loop: a working agent's title icon fades slowly. */

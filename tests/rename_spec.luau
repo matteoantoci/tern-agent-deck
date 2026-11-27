@@ -63,6 +63,7 @@ t.test("subagent rows and closed session rows offer no Rename, and a gone pin's 
 	local v = view({
 		agents = { agent({ state = "working", workingSince = 0 }) },
 		subagents = { [2] = { agents = { { id = "dx.Ticket07", name = "Ticket07", status = "running", depth = 1 } } } },
+		subsOpen = { [2] = true },
 		pins = { { pane = 9, cwd = REPO, title = "gone" } },
 	})
 	for _, line in visible.menu(v, "Ticket07") do
